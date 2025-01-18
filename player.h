@@ -8,13 +8,13 @@ typedef struct Player {
     float eye_z;
     float hfov;
     float vfov;
-    Vector2 speed;
+    Vector2 velocity;
     float rotate_speed;
+    float speed;
 } Player;
 
-void move_player(Player *player, float dt);
+void move_player(Player *player, float dt, int dir);
 void move_player_by_coord(Player *player, float dx, float dy, float dz);
 
-void rotate_player(Player *player, float dt);
+void rotate_player(Player *player, float dt, int dir);
 void rotate_player_by_angle(Player *player, float dtheta);
-

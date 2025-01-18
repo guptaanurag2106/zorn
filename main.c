@@ -2,6 +2,10 @@
 #include "textures.h"
 #include "utils.h"
 #include "vector.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_events.h>
+#include <SDL2/SDL_render.h>
+#include <SDL2/SDL_video.h>
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
@@ -157,45 +161,146 @@ int main() {
         return -1;
     }
 
-    Player player = {.x = 200,
-                     .y = 200,
-                     .theta = PI_2,
-                     .eye_z = 0.0f,
-                     .hfov = DEG2RAD(90.0f),
-                     .vfov = 0.5f,
-                     .speed = {.x = 3, .y = 0},
-                     .rotate_speed = 0.2};
+    Player player = {
+        .x = 200,
+        .y = 200,
+        .theta = PI_2,
+        .eye_z = 0.0f,
+        .hfov = DEG2RAD(90.0f),
+        .vfov = 0.5f,
+        .velocity = {.x = 0, .y = 0},
+        .rotate_speed = 0.1,
+        .speed = 10,
+    };
+    player.velocity.y = player.speed;
 
-    for (int i = 0; i < 10; i++) {
-        float dt = 2.0f * 10 / 60;
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+        fprintf(stderr, "ERROR: Failed to initialize SDL2: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    SDL_Window *window = NULL;
+    SDL_Renderer *renderer = NULL;
+    SDL_Texture *texture = NULL;
+
+    window = SDL_CreateWindow("Test", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
+                              SDL_WINDOW_ALLOW_HIGHDPI);
+    if (!window) {
+        fprintf(stderr, "ERROR: Failed to create window: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
+    if (!renderer) {
+        fprintf(stderr, "ERROR: Failed to create renderer: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    texture =
+
+        SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
+    if (!texture) {
+        fprintf(stderr, "ERROR: Failed to create texture: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // for (int i = 0; i < 10; i++) {
+    //     float dt = 2.0f * 10 / 60;
+    //     for (size_t i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+    //         image[i] = 0xFFFFFFFF;
+    //         minimap[i] = 0xFFAAAAAA;
+    //     }
+    //     rotate_player(&player, dt, 1);
+    //     move_player(&player, dt, 1);
+    //
+    //     char scene_file[50];
+    //     sprintf(scene_file, "scene%d.ppm", i);
+    //
+    //     // Draw minimap
+    //     for (int i = 0; i < MAP_HEIGHT; i++) {
+    //         for (int j = 0; j < MAP_WIDTH; j++) {
+    //
+    //             if (MAP[i + j * MAP_WIDTH] != ' ') {
+    //
+    //                 draw_rectangle(minimap, i * SCALE, j * SCALE, 1 * SCALE, 1 * SCALE, pack_colour(25, 25, 25,
+    //                 255));
+    //             }
+    //         }
+    //     }
+    //     draw_rectangle(minimap, player.x, player.y, 10, 10, pack_colour(255, 0, 0, 255));
+    //     draw_player_fov(minimap, &player, pack_colour(255, 255, 255, 255));
+    //     // dump_ppm(map_file, minimap, SCREEN_WIDTH, SCREEN_HEIGHT);
+    //
+    //     // Draw scene
+    //     draw_scene(image, &player, walltext, walltext_size, walltext_cnt);
+    //
+    //     // Draw minimap at bottom corner of size MINIMAP_SCALE
+    //     draw_minimap(image, minimap);
+    //     dump_ppm(scene_file, image, SCREEN_WIDTH, SCREEN_HEIGHT);
+    // }
+
+    bool quit = false;
+    // uint64_t NOW = SDL_GetPerformanceCounter();
+    // uint64_t LAST = 0;
+    double delta_time = 0;
+
+    while (!quit) {
+        // delta_time = (double)((NOW - LAST) * 1 / (double)SDL_GetPerformanceFrequency());
+        delta_time = 0.2;
+        SDL_Event ev;
+        while (SDL_PollEvent(&ev)) {
+            switch (ev.type) {
+            case SDL_QUIT:
+                quit = true;
+                break;
+            case SDL_KEYUP:
+                break;
+            case SDL_KEYDOWN:
+                // if ('a' == ev.key.keysym.sym)
+                //     rotate_player(&player, delta_time, -1);
+                // if ('d' == ev.key.keysym.sym)
+                //     rotate_player(&player, delta_time, 1);
+                // if ('s' == ev.key.keysym.sym)
+                //     move_player(&player, delta_time, -1);
+                // if ('w' == ev.key.keysym.sym)
+                //     move_player(&player, delta_time, 1);
+                break;
+            }
+        }
+
+        const Uint8 *keystate = SDL_GetKeyboardState(NULL);
+
+        if (keystate[SDL_SCANCODE_W]) {
+            move_player(&player, delta_time, 1); // Move forward
+        }
+
+        if (keystate[SDL_SCANCODE_S]) {
+            move_player(&player, delta_time, -1); // Move backward
+        }
+
+        if (keystate[SDL_SCANCODE_A]) {
+            rotate_player(&player, delta_time, -1); // Rotate left
+        }
+
+        if (keystate[SDL_SCANCODE_D]) {
+            rotate_player(&player, delta_time, 1); // Rotate right
+        }
+
         for (size_t i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
             image[i] = 0xFFFFFFFF;
             minimap[i] = 0xFFAAAAAA;
         }
-        rotate_player(&player, dt);
-        move_player(&player, dt);
-
-        char scene_file[50];
-        sprintf(scene_file, "scene%d.ppm", i);
-
-        // Draw minimap
-        for (int i = 0; i < MAP_HEIGHT; i++) {
-            for (int j = 0; j < MAP_WIDTH; j++) {
-                if (MAP[i + j * MAP_WIDTH] != ' ') {
-                    draw_rectangle(minimap, i * SCALE, j * SCALE, 1 * SCALE, 1 * SCALE, pack_colour(25, 25, 25, 255));
-                }
-            }
-        }
-        draw_rectangle(minimap, player.x, player.y, 10, 10, pack_colour(255, 0, 0, 255));
-        draw_player_fov(minimap, &player, pack_colour(255, 255, 255, 255));
-        // dump_ppm(map_file, minimap, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-        // Draw scene
         draw_scene(image, &player, walltext, walltext_size, walltext_cnt);
-
-        // Draw minimap at bottom corner of size MINIMAP_SCALE
-        draw_minimap(image, minimap);
-        dump_ppm(scene_file, image, SCREEN_WIDTH, SCREEN_HEIGHT);
+        SDL_UpdateTexture(texture, NULL, (void *)image, SCREEN_WIDTH * 4);
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
     }
+
     return 0;
 }
