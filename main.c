@@ -6,6 +6,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_render.h>
+#include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_video.h>
 #include <assert.h>
 #include <math.h>
@@ -162,12 +163,14 @@ int main() {
         .x = 200,
         .y = 200,
         .theta = 0, // 0 mean facing along y
-        .eye_z = 0.0f,
+        .eye_z = 100.0f,
         .hfov = DEG2RAD(90.0f),
         .vfov = 0.5f,
-        .velocity = {.x = 0, .y = 0},
+        .velocity = {.x = 0, .y = 0, .z=0},
         .rotate_speed = 0.1,
         .speed = 10,
+        .vert_speed = 100.0f,
+        .is_jumping = false,
     };
     player.velocity.y = player.speed;
 
@@ -243,6 +246,12 @@ int main() {
         if (keystate[SDL_SCANCODE_D]) {
             rotate_player(&player, delta_time, -1); // Rotate right
         }
+
+        if(keystate[SDL_SCANCODE_SPACE]){
+            jump_player(&player, delta_time);
+        }
+
+        player_gravity(&player, delta_time);
 
         for (size_t i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
             image[i] = 0xFFFFFFFF;

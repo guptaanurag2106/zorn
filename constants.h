@@ -30,3 +30,5 @@
 
 #define MINIMAP_SCALE 1.0f / 4
 #define MINIMAP_RANGE (int)(0.5 * WORLD_WIDTH)
+
+#define GRAVITY 30 // for jumping
