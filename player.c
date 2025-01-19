@@ -15,8 +15,8 @@ void move_player_by_coord(Player *player, float dx, float dy, float dz) {
 
 void rotate_player(Player *player, float dt, int dir) {
     player->theta = fmodf(player->theta + dt * player->rotate_speed * dir, 2 * PI);
-    player->velocity.x = player->speed * cos(player->theta);
-    player->velocity.y = player->speed * sin(player->theta);
+    player->velocity.x = player->speed * sin(player->theta);
+    player->velocity.y = player->speed * cos(player->theta);
     if (fabsf(player->theta - 0) < 0.01)
         player->theta = 0;
     if (fabsf(player->theta - PI_2) < 0.01)
