@@ -48,8 +48,27 @@ void draw_player_fov(uint32_t *minimap, Player *player, uint32_t colour) {
     }
 }
 
+void draw_minimap(uint32_t *minimap, Player *player) {
+    for (int i = 0; i < MINIMAP_RANGE; i++) {
+        for (int j = 0; j < MINIMAP_RANGE; j++) {
+            int cx = ((player->x - MINIMAP_RANGE / 2) + i) / SCALE;
+            int cy = ((player->y - MINIMAP_RANGE / 2) + j) / SCALE;
+            if (cx >= MAP_WIDTH || cy >= MAP_HEIGHT || cx < 0 || cy < 0)
+                continue;
 
-void draw_minimap(uint32_t *image, uint32_t *minimap, float theta) {
+            if (MAP[cx + cy * MAP_WIDTH] != ' ') {
+
+                draw_rectangle(minimap, i, j, 1 / SCALE, 1 / SCALE, MINIMAP_RANGE, MINIMAP_RANGE,
+                               pack_colour(25, 25, 25, 255));
+            }
+        }
+    }
+    draw_rectangle(minimap, MINIMAP_RANGE / 2 - 5, MINIMAP_RANGE / 2 - 5, 10, 10, MINIMAP_RANGE, MINIMAP_RANGE,
+                   player->colour);
+    draw_player_fov(minimap, player, pack_colour(255, 255, 255, 255));
+}
+
+void overlay_minimap(uint32_t *image, uint32_t *minimap, float theta) {
     uint32_t minimap_width = SCREEN_WIDTH * MINIMAP_SCALE;
     uint32_t minimap_height = SCREEN_HEIGHT * MINIMAP_SCALE;
 
@@ -85,6 +104,7 @@ void draw_minimap(uint32_t *image, uint32_t *minimap, float theta) {
     }
 }
 
+void handle_wall_collision(Player *player) {}
 
 void draw_scene(uint32_t *image, Player *player, uint32_t *walltext, size_t walltext_size, size_t walltext_cnt) {
 
@@ -127,6 +147,11 @@ void draw_scene(uint32_t *image, Player *player, uint32_t *walltext, size_t wall
                 draw_rectangle(image, SCREEN_WIDTH - i, SCREEN_HEIGHT / 2.0f - column_height / 2 + player->eye_z + y,
                                1 / SCALE, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
             }
+            for (size_t y = (SCREEN_HEIGHT / 2.0f + column_height / 2 + player->eye_z); y < SCREEN_HEIGHT; y++) {
+                uint32_t colour = pack_colour(0x18, 0x18, 0x18, 0xFF);
+
+                draw_rectangle(image, SCREEN_WIDTH - i, y, 1 / SCALE, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+            }
 
             break;
         }
@@ -137,9 +162,6 @@ int main() {
     assert(WORLD_WIDTH % MAP_WIDTH == 0);
     assert(WORLD_HEIGHT % MAP_HEIGHT == 0);
     assert(sizeof(MAP) == MAP_WIDTH * MAP_HEIGHT + 1);
-
-    // const char *scene_file = "scene.ppm";
-    const char *map_file = "map.ppm";
 
     uint32_t *image = (uint32_t *)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
     uint32_t *minimap = (uint32_t *)malloc(MINIMAP_RANGE * MINIMAP_RANGE * sizeof(uint32_t));
@@ -160,17 +182,18 @@ int main() {
     }
 
     Player player = {
-        .x = 200,
-        .y = 200,
+        .x = 300,
+        .y = 400,
         .theta = 0, // 0 mean facing along y
         .eye_z = 100.0f,
         .hfov = DEG2RAD(90.0f),
         .vfov = 0.5f,
-        .velocity = {.x = 0, .y = 0, .z=0},
+        .velocity = {.x = 0, .y = 0, .z = 0},
         .rotate_speed = 0.1,
         .speed = 10,
         .vert_speed = 100.0f,
         .is_jumping = false,
+        .colour = pack_colour(255, 0, 0, 255),
     };
     player.velocity.y = player.speed;
 
@@ -209,12 +232,9 @@ int main() {
     }
 
     bool quit = false;
-    // uint64_t NOW = SDL_GetPerformanceCounter();
-    // uint64_t LAST = 0;
     double delta_time = 0;
 
     while (!quit) {
-        // delta_time = (double)((NOW - LAST) * 1 / (double)SDL_GetPerformanceFrequency());
         delta_time = 0.2;
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
@@ -247,43 +267,38 @@ int main() {
             rotate_player(&player, delta_time, -1); // Rotate right
         }
 
-        if(keystate[SDL_SCANCODE_SPACE]){
+        if (keystate[SDL_SCANCODE_SPACE]) {
             jump_player(&player, delta_time);
         }
 
         player_gravity(&player, delta_time);
 
+        handle_wall_collision(&player);
+
         for (size_t i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
-            image[i] = 0xFFFFFFFF;
+            image[i] = 0xFFFFFFB2;
             if (i < MINIMAP_RANGE * MINIMAP_RANGE)
                 minimap[i] = 0xFFAAAAAA;
         }
-        for (int i = 0; i < MINIMAP_RANGE; i++) {
-            for (int j = 0; j < MINIMAP_RANGE; j++) {
-                int cx = ((player.x - MINIMAP_RANGE / 2) + i) / SCALE;
-                int cy = ((player.y - MINIMAP_RANGE / 2) + j) / SCALE;
-                if (cx >= MAP_WIDTH || cy >= MAP_HEIGHT || cx < 0 || cy < 0)
-                    continue;
 
-                if (MAP[cx + cy * MAP_WIDTH] != ' ') {
-
-                    draw_rectangle(minimap, i, j, 1/SCALE, 1/SCALE, MINIMAP_RANGE, MINIMAP_RANGE, pack_colour(25, 25, 25, 255));
-                }
-            }
-        }
-        draw_rectangle(minimap, MINIMAP_RANGE / 2 - 5, MINIMAP_RANGE / 2 - 5, 10, 10, MINIMAP_RANGE, MINIMAP_RANGE,
-                       pack_colour(255, 0, 0, 255));
-        draw_player_fov(minimap, &player, pack_colour(255, 255, 255, 255));
+        draw_minimap(minimap, &player);
 
         // Draw minimap at bottom corner of size MINIMAP_SCALE
         draw_scene(image, &player, walltext, walltext_size, walltext_cnt);
-        draw_minimap(image, minimap, player.theta);
+        overlay_minimap(image, minimap, player.theta);
 
         SDL_UpdateTexture(texture, NULL, (void *)image, SCREEN_WIDTH * 4);
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, NULL, NULL);
         SDL_RenderPresent(renderer);
     }
+
+    free(image);
+    free(minimap);
+    free(walltext);
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
 
     return 0;
 }

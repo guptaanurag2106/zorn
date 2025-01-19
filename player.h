@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vector.h"
+#include <stdint.h>
 #include <stdbool.h>
 
 typedef struct Player {
@@ -14,6 +15,7 @@ typedef struct Player {
     float speed;
     float vert_speed;
     bool is_jumping;
+    uint32_t colour;
 } Player;
 
 void move_player(Player *player, float dt, int dir);
