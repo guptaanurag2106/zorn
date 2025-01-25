@@ -1,11 +1,12 @@
 #pragma once
 
 #include "vector.h"
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct Player {
-    float x, y;
+    uint32_t id;
+    Vector2 pos;
     float theta;
     float eye_z;
     float hfov;
@@ -19,7 +20,7 @@ typedef struct Player {
 } Player;
 
 void move_player(Player *player, float dt, int dir);
-void move_player_by_coord(Player *player, float dx, float dy, float dz);
+void move_player_by_coord(Player *player, Vector2 dl);
 
 void rotate_player(Player *player, float dt, int dir);
 void rotate_player_by_angle(Player *player, float dtheta);
