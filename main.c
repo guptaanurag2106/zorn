@@ -1,4 +1,5 @@
 #include "constants.h"
+#include "game_state.h"
 #include "player.h"
 #include "textures.h"
 #include "utils.h"
@@ -18,29 +19,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-enum GameLoadState { LOADING, PLAYING, QUIT };
-
-typedef struct GameState {
-    SDL_Window *window;
-    SDL_Renderer *renderer;
-    SDL_Texture *texture;
-    uint32_t *image;
-    uint32_t *minimap;
-    Player *player;
-    uint32_t *walltext;
-    size_t walltext_size;
-    size_t walltext_cnt;
-    enum GameLoadState game_load_state;
-} GameState;
-
 void draw_rectangle(uint32_t *image, Vector2 pos, float w, float h, uint32_t image_w, uint32_t image_h,
                     uint32_t colour) {
     for (int i = 0; i < w; i++) {
-        size_t cx = pos.x + i;
+        int cx = pos.x + i;
         for (int j = 0; j < h; j++) {
-            size_t cy = pos.y + j;
+            int cy = pos.y + j;
             if (cx >= image_w || cy >= image_h || cx < 0 || cy < 0)
-                continue;
+                break;
             image[cx + cy * image_w] = colour;
         }
     }
@@ -82,12 +68,12 @@ void draw_minimap(GameState *gs) {
     }
     draw_rectangle(gs->minimap, (Vector2){MINIMAP_RANGE / 2 - 5, MINIMAP_RANGE / 2 - 5}, 10, 10, MINIMAP_RANGE,
                    MINIMAP_RANGE, gs->player->colour);
-    // draw_player_fov(gs->minimap, gs->player, pack_colour(255, 255, 255, 255));
+    draw_player_fov(gs->minimap, gs->player, pack_colour(255, 255, 255, 255));
 }
 
 void overlay_minimap(GameState *gs) {
-    uint32_t minimap_width = SCREEN_WIDTH * MINIMAP_SCALE;
-    uint32_t minimap_height = SCREEN_HEIGHT * MINIMAP_SCALE;
+    uint32_t minimap_width = SCREEN_HEIGHT * MINIMAP_SCALE;
+    uint32_t minimap_height = minimap_width;
 
     uint32_t start_x = SCREEN_WIDTH - minimap_width;
     uint32_t start_y = SCREEN_HEIGHT - minimap_height;
@@ -121,7 +107,7 @@ void overlay_minimap(GameState *gs) {
     }
 }
 
-void handle_wall_collision(GameState *gs, Vector2 old_pos) {
+void handle_wall_collision(GameState *gs, Vector2i old_pos) {
     if (gs->player->pos.x - PLAYER_SIZE < 0 || gs->player->pos.x + PLAYER_SIZE >= WORLD_WIDTH) {
         gs->player->pos.x = old_pos.x; // Revert to old position
     }
@@ -135,7 +121,6 @@ void handle_wall_collision(GameState *gs, Vector2 old_pos) {
 
     for (int i = -PLAYER_SIZE / 2; i <= PLAYER_SIZE / 2; i++) {
         int mx = (gs->player->pos.x + i) / SCALE;
-        int my = gs->player->pos.y / SCALE;
         if (MAP[mx + old_my * MAP_WIDTH] != ' ') {
             gs->player->pos.x = old_pos.x; // Revert to old position if there's a collision
             gs->player->pos.y = old_pos.y + (gs->player->pos.y - old_pos.y) * 0.4;
@@ -144,7 +129,6 @@ void handle_wall_collision(GameState *gs, Vector2 old_pos) {
     }
 
     for (int i = -PLAYER_SIZE / 2; i <= PLAYER_SIZE / 2; i++) {
-        int mx = gs->player->pos.x / SCALE;
         int my = (gs->player->pos.y + i) / SCALE;
         if (MAP[old_mx + my * MAP_WIDTH] != ' ') {
             gs->player->pos.y = old_pos.y; // Revert to old position if there's a collision
@@ -166,10 +150,10 @@ void draw_scene(GameState *gs) {
     // render_ceiling(gs);
     // render_floors(gs);
 
-    for (size_t i = 0; i < WORLD_WIDTH; i++) {
-        float theta = (gs->player->theta - gs->player->hfov / 2) + i * gs->player->hfov / WORLD_WIDTH;
+    for (uint32_t i = 0; i < SCREEN_WIDTH; i++) {
+        float theta = (gs->player->theta - gs->player->hfov / 2) + i * gs->player->hfov / SCREEN_WIDTH;
 
-        for (float j = NEAR_CLIPPING_PLANE; j <= FAR_CLIPPING_PLANE; j++) {
+        for (uint32_t j = NEAR_CLIPPING_PLANE; j <= FAR_CLIPPING_PLANE; j++) {
             float cx = gs->player->pos.x + j * sin(theta);
             float cy = gs->player->pos.y + j * cos(theta);
             if (cx >= WORLD_WIDTH || cy >= WORLD_HEIGHT || cx < 0 || cy < 0)
@@ -183,14 +167,13 @@ void draw_scene(GameState *gs) {
 
             int textid = id - '0';
 
-            uint column_height =
-                (uint)WORLD_HEIGHT * 50 / (j * cos(theta - gs->player->theta)); // 50 is the scaling factor for walls
+            uint32_t column_height =
+                (uint)WORLD_HEIGHT * 20 / (j * cos(theta - gs->player->theta)); // 50 is the scaling factor for walls
 
-            for (size_t y = (SCREEN_HEIGHT / 2.0f + column_height / 2 + gs->player->eye_z); y < SCREEN_HEIGHT; y++) {
+            for (size_t y = (SCREEN_HEIGHT / 2 + column_height / 2 + gs->player->eye_z); y < SCREEN_HEIGHT; y++) {
                 uint32_t colour = pack_colour(0x18, 0x18, 0x18, 0xFF);
 
-                draw_rectangle(gs->image, (Vector2){SCREEN_WIDTH - i, y}, 1 / SCALE, 1, SCREEN_WIDTH, SCREEN_HEIGHT,
-                               colour);
+                draw_rectangle(gs->image, (Vector2){SCREEN_WIDTH - i, y}, 1, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
             }
 
             if (!(textid >= 0 && textid < gs->walltext_cnt))
@@ -215,11 +198,21 @@ void draw_scene(GameState *gs) {
 
                 draw_rectangle(
                     gs->image,
-                    (Vector2){SCREEN_WIDTH - i, SCREEN_HEIGHT / 2.0f - column_height / 2 + gs->player->eye_z + y},
-                    1 / SCALE, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+                    (Vector2){SCREEN_WIDTH - i, SCREEN_HEIGHT / 2.0f - column_height / 2 + gs->player->eye_z + y}, 1, 1,
+                    SCREEN_WIDTH, SCREEN_HEIGHT, colour);
             }
 
             break;
+        }
+    }
+
+    int center_x = SCREEN_WIDTH / 2;
+    int center_y = SCREEN_HEIGHT / 2;
+    int crosshair_size = 5;
+    for (int dy = -crosshair_size; dy <= crosshair_size; dy++) {
+        for (int dx = -crosshair_size; dx <= crosshair_size; dx++) {
+            int index = (center_x + dx) + (center_y + dy) * SCREEN_WIDTH;
+            (gs->image)[index] = pack_colour(0xFF, 0, 0, 0xFF);
         }
     }
 }
@@ -237,7 +230,7 @@ void delete_state(GameState *gs) {
 bool init_state(GameState *gs) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "ERROR: Failed to initialize SDL2: %s\n", SDL_GetError());
-        return 1;
+        return false;
     }
 
     gs->window = SDL_CreateWindow("Test", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -245,7 +238,7 @@ bool init_state(GameState *gs) {
     if (!gs->window) {
         fprintf(stderr, "ERROR: Failed to create window: %s\n", SDL_GetError());
         SDL_Quit();
-        return 1;
+        return false;
     }
 
     gs->renderer = SDL_CreateRenderer(gs->window, -1, SDL_RENDERER_PRESENTVSYNC);
@@ -253,7 +246,7 @@ bool init_state(GameState *gs) {
         fprintf(stderr, "ERROR: Failed to create renderer: %s\n", SDL_GetError());
         SDL_DestroyWindow(gs->window);
         SDL_Quit();
-        return 1;
+        return false;
     }
 
     gs->texture = SDL_CreateTexture(gs->renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH,
@@ -262,7 +255,7 @@ bool init_state(GameState *gs) {
         fprintf(stderr, "ERROR: Failed to create texture: %s\n", SDL_GetError());
         SDL_DestroyWindow(gs->window);
         SDL_Quit();
-        return 1;
+        return false;
     }
 
     SDL_UpdateTexture(gs->texture, NULL, (void *)(gs->image), SCREEN_WIDTH * 4);
@@ -273,16 +266,19 @@ bool init_state(GameState *gs) {
     gs->minimap = (uint32_t *)malloc(MINIMAP_RANGE * MINIMAP_RANGE * sizeof(uint32_t));
 
     if (gs->image == NULL) {
+        delete_state(gs);
         fprintf(stderr, "Memory allocation for image failed!\n");
-        return 1;
+        return false;
     }
     if (gs->minimap == NULL) {
+        delete_state(gs);
         fprintf(stderr, "Memory allocation for minimap failed!\n");
-        return 1;
+        return false;
     }
 
     if (!load_texture("assets/walltext.png", &(gs->walltext), &(gs->walltext_size), &(gs->walltext_cnt))) {
-        return -1;
+        delete_state(gs);
+        return false;
     }
 
     SDL_Event ev;
@@ -298,8 +294,6 @@ bool init_state(GameState *gs) {
         }
     }
 
-    SDL_Delay(500);
-
     return true;
 }
 
@@ -308,7 +302,7 @@ int main() {
 
     Player player = {
         .id = 1,
-        .pos = {320, 420}, // in world coordinates
+        .pos = {1100, 90}, // in world coordinates
         .theta = 0,        // 0 mean facing along y
         .eye_z = SCREEN_HEIGHT / 10.0f,
         .hfov = DEG2RAD(90.0f),
@@ -343,6 +337,7 @@ int main() {
         }
 
         double delta_time = (SDL_GetTicks64() - start_time) / 75.0f;
+        printf("%lu ", (SDL_GetTicks64() - start_time));
         start_time = SDL_GetTicks64();
 
         SDL_Event ev;
@@ -360,7 +355,7 @@ int main() {
 
         const Uint8 *keystate = SDL_GetKeyboardState(NULL);
 
-        const Vector2 old_pos = gs.player->pos;
+        const Vector2i old_pos = gs.player->pos;
 
         if (keystate[SDL_SCANCODE_W]) {
             move_player(gs.player, delta_time, 1); // Move forward

@@ -11,34 +11,13 @@ typedef struct Vector2 {
     float x, y;
 } Vector2;
 
-#define dot2D(v0, v1)                                                                                                  \
-    ({                                                                                                                 \
-        const Vector2 _v0 = (v0), _v1 = (v1);                                                                          \
-        (_v0.x * _v1.x) + (_v0.y * _v1.y);                                                                             \
-    })
-#define length2D(v)                                                                                                    \
-    ({                                                                                                                 \
-        const Vector2 _v = (v);                                                                                        \
-        sqrtf(dot(_v, _v));                                                                                            \
-    })
-#define normalize2D(u)                                                                                                 \
-    ({                                                                                                                 \
-        const Vector2 _u = (u);                                                                                        \
-        const float l = length(_u);                                                                                    \
-        (Vector2){_u.x / l, _u.y / l};                                                                                 \
-    })
+typedef struct Vector2i {
+    int x, y;
+} Vector2i;
 
-// #define scale2D(v, x) ((Vector2){(v).x * (x), (v).y * (x)})
-#define scale2D(v, x) ((Vector2){(v).x * (x), (v).y * (x)})
+static inline Vector2 add2D(Vector2 a, Vector2 b) { return (Vector2){.x = a.x + b.x, .y = a.y + b.y}; }
 
-
-
-// #define scale2D(v, x)                                                                                                  \
-//     ({                                                                                                                  \
-//         (Vector2){(v).x * x, (v).y * x};                                                                               \
-//     })
-
-#define add2D(v0, v1) ({ (Vector2){(v0).x + (v1).x, (v0).y + (v1).y}; })
+static inline Vector2i add2Di(Vector2i a, Vector2i b) { return (Vector2i){.x = a.x + b.x, .y = a.y + b.y}; }
 
 typedef struct Vector3 {
     float x, y, z;

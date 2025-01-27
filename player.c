@@ -9,7 +9,7 @@ void move_player(Player *player, float dt, int dir) {
     player->pos.y += dt * player->velocity.y * dir;
 }
 
-void move_player_by_coord(Player *player, Vector2 dl) { player->pos = add2D(player->pos, dl); }
+void move_player_by_coord(Player *player, Vector2i dl) { player->pos = add2Di(player->pos, dl); }
 
 void rotate_player(Player *player, float dt, int dir) {
     player->theta += dt * player->rotate_speed * dir;

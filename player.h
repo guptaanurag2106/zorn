@@ -6,7 +6,7 @@
 
 typedef struct Player {
     uint32_t id;
-    Vector2 pos;
+    Vector2i pos;
     float theta;
     float eye_z;
     float hfov;
@@ -20,7 +20,7 @@ typedef struct Player {
 } Player;
 
 void move_player(Player *player, float dt, int dir);
-void move_player_by_coord(Player *player, Vector2 dl);
+void move_player_by_coord(Player *player, Vector2i dl);
 
 void rotate_player(Player *player, float dt, int dir);
 void rotate_player_by_angle(Player *player, float dtheta);
