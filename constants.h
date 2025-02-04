@@ -80,7 +80,7 @@
 
 #define GRAVITY 30 // for jumping
 
-#define PLAYER_SIZE 50
+#define PLAYER_SIZE 40
 #define PLAYER_SNAP_ROTATION PI / 18
 #define NEAR_CLIPPING_PLANE (PLAYER_SIZE / 2)
 // #define FAR_CLIPPING_PLANE (WORLD_HEIGHT / 2)

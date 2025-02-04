@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void draw_rectangle(uint32_t *image, Vector2 pos, float w, float h, uint32_t image_w, uint32_t image_h,
+void draw_rectangle(uint32_t *image, Vector2i pos, uint32_t w, uint32_t h, uint32_t image_w, uint32_t image_h,
                     uint32_t colour) {
     for (int i = 0; i < w; i++) {
         int cx = pos.x + i;
@@ -33,7 +33,7 @@ void draw_rectangle(uint32_t *image, Vector2 pos, float w, float h, uint32_t ima
 }
 
 void draw_player_fov(uint32_t *minimap, Player *player, uint32_t colour) {
-    for (size_t i = 0; i < WORLD_WIDTH; i += 100) {
+    for (size_t i = 0; i < WORLD_WIDTH; i += 100) { // WORLD_WIDTH number of rays
         float theta = (player->theta - player->hfov / 2) + i * player->hfov / WORLD_WIDTH;
 
         for (size_t j = 0; j < 80; j++) {
@@ -52,6 +52,10 @@ void draw_player_fov(uint32_t *minimap, Player *player, uint32_t colour) {
 }
 
 void draw_minimap(GameState *gs) {
+    for (size_t i = 0; i < MINIMAP_RANGE * MINIMAP_RANGE; i++) {
+        (gs->minimap)[i] = 0xFFAAAAAA;
+    }
+
     for (int i = 0; i < MINIMAP_RANGE; i++) {
         for (int j = 0; j < MINIMAP_RANGE; j++) {
             int cx = ((gs->player->pos.x - MINIMAP_RANGE / 2) + i) / SCALE;
@@ -61,12 +65,12 @@ void draw_minimap(GameState *gs) {
 
             if (MAP[cx + cy * MAP_WIDTH] != ' ') {
 
-                draw_rectangle(gs->minimap, (Vector2){i, j}, 1 / SCALE, 1 / SCALE, MINIMAP_RANGE, MINIMAP_RANGE,
+                draw_rectangle(gs->minimap, (Vector2i){i, j}, 1, 1, MINIMAP_RANGE, MINIMAP_RANGE,
                                pack_colour(25, 25, 25, 255));
             }
         }
     }
-    draw_rectangle(gs->minimap, (Vector2){MINIMAP_RANGE / 2 - 5, MINIMAP_RANGE / 2 - 5}, 10, 10, MINIMAP_RANGE,
+    draw_rectangle(gs->minimap, (Vector2i){MINIMAP_RANGE / 2 - 10, MINIMAP_RANGE / 2 - 10}, 20, 20, MINIMAP_RANGE,
                    MINIMAP_RANGE, gs->player->colour);
     draw_player_fov(gs->minimap, gs->player, pack_colour(255, 255, 255, 255));
 }
@@ -139,16 +143,27 @@ void handle_wall_collision(GameState *gs, Vector2i old_pos) {
 }
 
 // TODO
-// void render_ceiling(GameState *gs) {
-// }
+void render_ceiling(GameState *gs) {
+    for (uint32_t j = 0; j <= (SCREEN_HEIGHT / 2 + gs->player->eye_z); j++) {
+        uint32_t colour = darken_color(0xFFEBCE87, j, SCREEN_HEIGHT / 2 + gs->player->eye_z);
+
+        draw_rectangle(gs->image, (Vector2i){0, j}, SCREEN_WIDTH, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+    }
+}
 
 // TODO
-// void render_floors(GameState *gs) {
-// }
+void render_floors(GameState *gs) {
+    for (uint32_t j = 0; j <= (SCREEN_HEIGHT / 2 - gs->player->eye_z); j++) {
+        uint32_t colour = darken_color(pack_colour(0x18, 0x18, 0x18, 0xFF), j, SCREEN_HEIGHT / 2 - gs->player->eye_z);
+
+        draw_rectangle(gs->image, (Vector2i){0, SCREEN_HEIGHT - j}, SCREEN_WIDTH, 1, SCREEN_WIDTH, SCREEN_HEIGHT,
+                       colour);
+    }
+}
 
 void draw_scene(GameState *gs) {
-    // render_ceiling(gs);
-    // render_floors(gs);
+    render_ceiling(gs);
+    render_floors(gs);
 
     for (uint32_t i = 0; i < SCREEN_WIDTH; i++) {
         float theta = (gs->player->theta - gs->player->hfov / 2) + i * gs->player->hfov / SCREEN_WIDTH;
@@ -170,12 +185,6 @@ void draw_scene(GameState *gs) {
             uint32_t column_height =
                 (uint)WORLD_HEIGHT * 20 / (j * cos(theta - gs->player->theta)); // 50 is the scaling factor for walls
 
-            for (size_t y = (SCREEN_HEIGHT / 2 + column_height / 2 + gs->player->eye_z); y < SCREEN_HEIGHT; y++) {
-                uint32_t colour = pack_colour(0x18, 0x18, 0x18, 0xFF);
-
-                draw_rectangle(gs->image, (Vector2){SCREEN_WIDTH - i, y}, 1, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
-            }
-
             if (!(textid >= 0 && textid < gs->walltext_cnt))
                 break;
 
@@ -195,24 +204,15 @@ void draw_scene(GameState *gs) {
                 ty = y * gs->walltext_size / column_height;
                 uint32_t colour =
                     gs->walltext[(tx + textid * gs->walltext_size) + ty * (gs->walltext_size * gs->walltext_cnt)];
+                colour = darken_color(colour, j, FAR_CLIPPING_PLANE);
 
                 draw_rectangle(
                     gs->image,
-                    (Vector2){SCREEN_WIDTH - i, SCREEN_HEIGHT / 2.0f - column_height / 2 + gs->player->eye_z + y}, 1, 1,
-                    SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+                    (Vector2i){SCREEN_WIDTH - i, SCREEN_HEIGHT / 2.0f - column_height / 2 + gs->player->eye_z + y}, 1,
+                    1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
             }
 
             break;
-        }
-    }
-
-    int center_x = SCREEN_WIDTH / 2;
-    int center_y = SCREEN_HEIGHT / 2;
-    int crosshair_size = 5;
-    for (int dy = -crosshair_size; dy <= crosshair_size; dy++) {
-        for (int dx = -crosshair_size; dx <= crosshair_size; dx++) {
-            int index = (center_x + dx) + (center_y + dy) * SCREEN_WIDTH;
-            (gs->image)[index] = pack_colour(0xFF, 0, 0, 0xFF);
         }
     }
 }
@@ -309,7 +309,7 @@ int main() {
         .vfov = 0.5f,
         .velocity = {.x = 0, .y = 0, .z = 0},
         .rotate_speed = DEG2RAD(5),
-        .speed = WORLD_HEIGHT / 120,
+        .speed = WORLD_HEIGHT / 140,
         .vert_speed = SCREEN_HEIGHT / 10.0f,
         .is_jumping = false,
         .colour = pack_colour(255, 0, 0, 255),
@@ -337,7 +337,6 @@ int main() {
         }
 
         double delta_time = (SDL_GetTicks64() - start_time) / 75.0f;
-        printf("%lu ", (SDL_GetTicks64() - start_time));
         start_time = SDL_GetTicks64();
 
         SDL_Event ev;
@@ -381,11 +380,6 @@ int main() {
 
         handle_wall_collision(&gs, old_pos);
 
-        for (size_t i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
-            (gs.image)[i] = 0xFFFFFFB2;
-            if (i < MINIMAP_RANGE * MINIMAP_RANGE)
-                (gs.minimap)[i] = 0xFFAAAAAA;
-        }
         draw_minimap(&gs);
 
         draw_scene(&gs);

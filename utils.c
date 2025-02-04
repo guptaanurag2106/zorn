@@ -1,4 +1,6 @@
 #include "utils.h"
+#include "constants.h"
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -8,6 +10,26 @@ void unpack_colour(uint32_t colour, uint8_t *r, uint8_t *g, uint8_t *b, uint8_t 
     *r = (colour >> 0) & 0xFF;
     *g = (colour >> 8) & 0xFF;
     *b = (colour >> 16) & 0xFF;
+}
+
+uint32_t darken_color(uint32_t colour, int d, int limit) {
+    if (d < 1)
+        d = 1;
+    if (d > limit)
+        d = limit;
+
+    float factor = 1 / (1 + powf((float)d * 10 / limit, 5) * 0.0002);
+    uint32_t darkened_color = colour;
+
+    darkened_color &= 0xFF00FFFF;
+    darkened_color |= (uint32_t)((((colour >> 16) & 0xFF) * factor)) << 16;
+
+    darkened_color &= 0xFFFF00FF;
+    darkened_color |= (uint32_t)((((colour >> 8) & 0xFF) * factor)) << 8;
+    darkened_color &= 0xFFFFFF00;
+    darkened_color |= (uint32_t)((((colour >> 0) & 0xFF) * factor)) << 0;
+
+    return darkened_color;
 }
 
 void dump_ppm(const char *output_file, uint32_t *image, const size_t width, const size_t height) {

@@ -6,3 +6,4 @@ using stb_image from https://github.com/nothings/stb
 
 ## References
 - https://github.com/ssloy/tinyraycaster/wiki
+- https://lodev.org/cgtutor/raycasting.html
