@@ -4,7 +4,7 @@
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
 
-enum GameLoadState { LOADING, PLAYING, QUIT };
+enum GameLoadState { LOADING, PLAYING, QUIT , INITIAL};
 
 typedef struct GameState {
     SDL_Window *window;

@@ -76,12 +76,13 @@
 #define WORLD_HEIGHT (MAP_HEIGHT * SCALE)
 
 #define MINIMAP_SCALE 1.0f / 4                 // overlay size on screen (scale w.r.t SCREEN_WIDTH)
-#define MINIMAP_RANGE (int)(0.5 * WORLD_WIDTH) // how far around the player can you see the world
+#define MINIMAP_RANGE (int)(0.2 * WORLD_WIDTH) // how far around the player can you see the world
 
 #define GRAVITY 30 // for jumping
 
-#define PLAYER_SIZE 40
-#define PLAYER_SNAP_ROTATION PI / 18
+#define PLAYER_SIZE 20.0f
+#define PLAYER_SNAP_ROTATION PI / 30.0f
+#define PLAYER_SPEED WORLD_HEIGHT / 150
+#define PLAYER_VERT_SPEED SCREEN_HEIGHT / 10.0f
 #define NEAR_CLIPPING_PLANE (PLAYER_SIZE / 2)
-// #define FAR_CLIPPING_PLANE (WORLD_HEIGHT / 2)
 #define FAR_CLIPPING_PLANE (WORLD_HEIGHT / 1)

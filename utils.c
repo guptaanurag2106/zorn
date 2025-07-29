@@ -1,22 +1,26 @@
 #include "utils.h"
-#include "constants.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 
-uint32_t pack_colour(uint8_t r, uint8_t g, uint8_t b, uint8_t a) { return (a << 24) | (b << 16) | (g << 8) | (r << 0); }
+#include "constants.h"
 
-void unpack_colour(uint32_t colour, uint8_t *r, uint8_t *g, uint8_t *b, uint8_t *a) {
+uint32_t pack_colour(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    return (a << 24) | (b << 16) | (g << 8) | (r << 0);
+}
+
+void unpack_colour(uint32_t colour, uint8_t *r, uint8_t *g, uint8_t *b,
+                   uint8_t *a) {
     *r = (colour >> 0) & 0xFF;
     *g = (colour >> 8) & 0xFF;
     *b = (colour >> 16) & 0xFF;
+    *a = (colour >> 24) & 0xFF;
 }
 
 uint32_t darken_color(uint32_t colour, int d, int limit) {
-    if (d < 1)
-        d = 1;
-    if (d > limit)
-        d = limit;
+    if (d < 1) d = 1;
+    if (d > limit) d = limit;
 
     float factor = 1 / (1 + powf((float)d * 10 / limit, 5) * 0.0002);
     uint32_t darkened_color = colour;
@@ -32,7 +36,8 @@ uint32_t darken_color(uint32_t colour, int d, int limit) {
     return darkened_color;
 }
 
-void dump_ppm(const char *output_file, uint32_t *image, const size_t width, const size_t height) {
+void dump_ppm(const char *output_file, uint32_t *image, const size_t width,
+              const size_t height) {
     FILE *output = fopen(output_file, "wb");
 
     fprintf(output, "P3\n");
@@ -44,8 +49,7 @@ void dump_ppm(const char *output_file, uint32_t *image, const size_t width, cons
         for (size_t j = 0; j < width; j++) {
             unpack_colour(image[j + i * width], &r, &g, &b, &a);
             fprintf(output, "%u %u %u", r, g, b);
-            if (j != (width - 1))
-                fprintf(output, " ");
+            if (j != (width - 1)) fprintf(output, " ");
         }
         fprintf(output, "\n");
     }
