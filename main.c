@@ -4,6 +4,7 @@
 #include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_surface.h>
 #include <SDL2/SDL_timer.h>
+#include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_video.h>
 #include <assert.h>
 #include <math.h>
@@ -12,6 +13,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "constants.h"
 #include "game_state.h"
@@ -145,7 +147,7 @@ void handle_wall_collision(GameState *gs, Vector2 old_pos) {
             gs->player->pos.x =
                 old_pos.x;  // Revert to old position if there's a collision
             gs->player->pos.y = old_pos.y + (gs->player->pos.y - old_pos.y) *
-                                                0.4;  // slowly glide along wall
+                                                0.8;  // slowly glide along wall
             break;
         }
     }
@@ -156,7 +158,7 @@ void handle_wall_collision(GameState *gs, Vector2 old_pos) {
             gs->player->pos.y =
                 old_pos.y;  // Revert to old position if there's a collision
             gs->player->pos.x =
-                old_pos.x + (gs->player->pos.x - old_pos.x) * 0.4;
+                old_pos.x + (gs->player->pos.x - old_pos.x) * 0.8;
             break;
         }
     }
@@ -253,6 +255,7 @@ void delete_state(GameState *gs) {
     free(gs->image);
     free(gs->minimap);
     free(gs->walltext);
+    free(gs->texts);
     SDL_DestroyTexture(gs->texture);
     SDL_DestroyRenderer(gs->renderer);
     SDL_DestroyWindow(gs->window);
@@ -261,7 +264,7 @@ void delete_state(GameState *gs) {
 
 void get_player_random_init(Player *player) {
     int start_x, start_y;
-    int found = 0;
+    bool found = false;
 
     start_x = rand() % SCREEN_WIDTH;
     start_y = rand() % SCREEN_HEIGHT;
@@ -271,13 +274,15 @@ void get_player_random_init(Player *player) {
             for (int dy = -radius; dy <= radius; dy++) {
                 int new_x = start_x + dx;
                 int new_y = start_y + dy;
-                if (new_x >= 0 && new_x < SCREEN_WIDTH && new_y >= 0 &&
-                    new_y < SCREEN_HEIGHT) {
+                if (new_x > PLAYER_SIZE &&
+                    new_x < (SCREEN_WIDTH - PLAYER_SIZE) &&
+                    new_y > PLAYER_SIZE &&
+                    new_y < (SCREEN_HEIGHT - PLAYER_SIZE)) {
                     if (MAP[(int)(new_x / SCALE) +
                             (int)(new_y / SCALE) * MAP_WIDTH] == ' ') {
                         player->pos.x = new_x;
                         player->pos.y = new_y;
-                        found = 1;
+                        found = true;
                         break;
                     }
                 }
@@ -296,7 +301,7 @@ void get_player_random_init(Player *player) {
 }
 
 bool init_state(GameState *gs) {
-    srand(0);
+    srand((unsigned int)time(NULL));
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "ERROR: Failed to initialize SDL2: %s\n",
                 SDL_GetError());
@@ -359,18 +364,30 @@ bool init_state(GameState *gs) {
         return false;
     }
 
-    SDL_Event ev;
-    while (SDL_PollEvent(&ev)) {
-        switch (ev.type) {
-            case SDL_QUIT:
-                delete_state(gs);
-                break;
-            case SDL_KEYUP:
-                break;
-            case SDL_KEYDOWN:
-                break;
-        }
+    if (TTF_Init() < 0) {
+        fprintf(stderr, "ERROR: Could not initialize SDL_Font\n");
+        delete_state(gs);
+        return false;
     }
+    gs->texts = NULL;
+    char *font_file =
+        "/usr/share/fonts/TTF/InconsolataNerdFontMono-Regular.ttf";
+    TTF_Font *fps_font = TTF_OpenFont(font_file, 32);
+    if (!fps_font) {
+        fprintf(stderr, "ERROR: Could not open font file: %s %s\n", font_file,
+                TTF_GetError());
+        delete_state(gs);
+        return false;
+    }
+    SDL_Color fps_textColour = {50, 50, 50, 255};
+    SDL_Rect fps_textRect = {SCREEN_WIDTH - 200, 0, 200, 32};
+
+    gs->texts = realloc(gs->texts, sizeof(Text) * (gs->text_count + 1));
+    Text *newText = &gs->texts[gs->text_count];
+    newText->font = fps_font;
+    newText->colour = fps_textColour;
+    newText->position = fps_textRect;
+    gs->text_count++;
 
     get_player_random_init(gs->player);
 
@@ -396,16 +413,16 @@ int main() {
     };
     player.velocity.y = player.speed;
 
-    GameState gs = {
-        .window = NULL,
-        .renderer = NULL,
-        .texture = NULL,
-        .image = NULL,
-        .minimap = NULL,
-        .player = &player,
-        .walltext = NULL,
-        .game_load_state = INITIAL,
-    };
+    GameState gs = {.window = NULL,
+                    .renderer = NULL,
+                    .texture = NULL,
+                    .image = NULL,
+                    .minimap = NULL,
+                    .player = &player,
+                    .walltext = NULL,
+                    .game_load_state = INITIAL,
+                    .texts = NULL,
+                    .text_count = 0};
 
     uint32_t start_time = 0;
     if (gs.game_load_state == INITIAL) {
@@ -425,6 +442,9 @@ int main() {
                     break;
             }
         }
+
+        gs.texts[0].content = malloc(sizeof(char) * 15);
+        sprintf(gs.texts[0].content, "FPS: %.0f", 1000 / delta_time);
 
         const Uint8 *keystate = SDL_GetKeyboardState(NULL);
 
@@ -465,6 +485,28 @@ int main() {
         SDL_UpdateTexture(gs.texture, NULL, (void *)(gs.image),
                           SCREEN_WIDTH * 4);
         SDL_RenderCopy(gs.renderer, gs.texture, NULL, NULL);
+        for (size_t i = 0; i < gs.text_count; i++) {
+            Text *text = &gs.texts[i];
+            SDL_Surface *textSurface =
+                TTF_RenderText_Solid(text->font, text->content, text->colour);
+
+            if (!textSurface) {
+                fprintf(stderr, "ERROR: Failed to create text surface: %s\n",
+                        TTF_GetError());
+                return EXIT_FAILURE;
+            }
+
+            SDL_Texture *textTexture =
+                SDL_CreateTextureFromSurface(gs.renderer, textSurface);
+
+            if (!textTexture) {
+                fprintf(stderr, "ERROR: Failed to create text texture: %s\n",
+                        SDL_GetError());
+                return EXIT_FAILURE;
+            }
+            SDL_RenderCopy(gs.renderer, textTexture, NULL, &text->position);
+        }
+
         SDL_RenderPresent(gs.renderer);
     }
 

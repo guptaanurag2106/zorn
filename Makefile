@@ -1,8 +1,8 @@
 CC = gcc
 CFLAGS_DEBUG = -Wall -Wextra -Wpedantic -g
 CFLAGS_RELEASE = -Wall -Wextra -O3
-SDL2_INCLUDE_PATH = $(shell pkg-config --cflags sdl2)
-SDL2_LIB_PATH = $(shell pkg-config --libs sdl2)
+SDL2_INCLUDE_PATH = $(shell pkg-config --cflags SDL2_ttf)
+SDL2_LIB_PATH = $(shell pkg-config --libs SDL2_ttf)
 LDFLAGS = -lm
 
 SERVER_DIR = server
