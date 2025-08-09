@@ -1,11 +1,12 @@
 #pragma once
 
-#include "vector.h"
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "vector.h"
+
 typedef struct Player {
-    uint32_t id;
+    char *id;
     Vector2 pos;
     float theta;
     float eye_z;

@@ -19,6 +19,7 @@
 #include "game_state.h"
 #include "player.h"
 #include "textures.h"
+#include "utilities.h"
 #include "utils.h"
 #include "vector.h"
 
@@ -58,29 +59,32 @@ void draw_player_fov(uint32_t *minimap, Player *player) {
 
 void draw_minimap(GameState *gs) {
     for (uint32_t i = 0; i < MINIMAP_RANGE * MINIMAP_RANGE; i++) {
-        (gs->minimap)[i] = pack_colour(25, 5, 25, 255);
+        (gs->renderState->minimap)[i] = pack_colour(25, 5, 25, 255);
     }
 
     for (uint32_t i = 0; i < MINIMAP_RANGE; i++) {
         for (uint32_t j = 0; j < MINIMAP_RANGE; j++) {
-            uint32_t cx = ((gs->player->pos.x - MINIMAP_RANGE / 2) + i) /
-                          SCALE;  // in MAP scale
-            uint32_t cy = ((gs->player->pos.y - MINIMAP_RANGE / 2) + j) / SCALE;
+            uint32_t cx =
+                ((gs->sharedState->player->pos.x - MINIMAP_RANGE / 2) + i) /
+                SCALE;  // in MAP scale
+            uint32_t cy =
+                ((gs->sharedState->player->pos.y - MINIMAP_RANGE / 2) + j) /
+                SCALE;
             if (cx >= MAP_WIDTH || cy >= MAP_HEIGHT || cx < 0 || cy < 0)
                 continue;
 
             if (MAP[cx + cy * MAP_WIDTH] == ' ') {
-                draw_rectangle(gs->minimap, (Vector2i){i, j}, 1, 1,
+                draw_rectangle(gs->renderState->minimap, (Vector2i){i, j}, 1, 1,
                                MINIMAP_RANGE, MINIMAP_RANGE, 0xFFAAAAAA);
             }
         }
     }
-    draw_rectangle(gs->minimap,
+    draw_rectangle(gs->renderState->minimap,
                    (Vector2i){MINIMAP_RANGE / 2 - PLAYER_SIZE / 2,
                               MINIMAP_RANGE / 2 - PLAYER_SIZE / 2},
                    PLAYER_SIZE, PLAYER_SIZE, MINIMAP_RANGE, MINIMAP_RANGE,
-                   gs->player->colour);
-    // draw_player_fov(gs->minimap, gs->player);
+                   gs->sharedState->player->colour);
+    // draw_player_fov(gs->renderState->minimap, gs->sharedState->player);
 }
 
 void overlay_minimap(GameState *gs) {
@@ -94,8 +98,8 @@ void overlay_minimap(GameState *gs) {
     uint32_t center_y = minimap_height / 2;
     uint32_t radius = minimap_width / 2;
 
-    float cos_theta = -cosf(gs->player->theta);
-    float sin_theta = sinf(gs->player->theta);
+    float cos_theta = -cosf(gs->sharedState->player->theta);
+    float sin_theta = sinf(gs->sharedState->player->theta);
 
     for (uint32_t y = 0; y < minimap_height; y++) {
         for (uint32_t x = 0; x < minimap_width; x++) {
@@ -116,10 +120,12 @@ void overlay_minimap(GameState *gs) {
                         (rotated_y * MINIMAP_RANGE) / minimap_height;
 
                     uint32_t color =
-                        gs->minimap[original_x +
-                                    (int)(original_y * MINIMAP_RANGE)];
+                        gs->renderState
+                            ->minimap[original_x +
+                                      (int)(original_y * MINIMAP_RANGE)];
 
-                    gs->image[(start_x + x) + (start_y + y) * SCREEN_WIDTH] =
+                    gs->renderState
+                        ->image[(start_x + x) + (start_y + y) * SCREEN_WIDTH] =
                         color;
                 }
             }
@@ -127,38 +133,38 @@ void overlay_minimap(GameState *gs) {
     }
 }
 
-void handle_wall_collision(GameState *gs, Vector2 old_pos) {
-    if (gs->player->pos.x - PLAYER_SIZE / 2 < 0 ||
-        gs->player->pos.x + PLAYER_SIZE / 2 >= WORLD_WIDTH) {
-        gs->player->pos.x = old_pos.x;  // Revert to old position
+void handle_wall_collision(SharedState *ss, Vector2 old_pos) {
+    if (ss->player->pos.x - PLAYER_SIZE / 2 < 0 ||
+        ss->player->pos.x + PLAYER_SIZE / 2 >= WORLD_WIDTH) {
+        ss->player->pos.x = old_pos.x;  // Revert to old position
     }
 
-    if (gs->player->pos.y - PLAYER_SIZE / 2 < 0 ||
-        gs->player->pos.y + PLAYER_SIZE / 2 >= WORLD_HEIGHT) {
-        gs->player->pos.y = old_pos.y;  // Revert to old position
+    if (ss->player->pos.y - PLAYER_SIZE / 2 < 0 ||
+        ss->player->pos.y + PLAYER_SIZE / 2 >= WORLD_HEIGHT) {
+        ss->player->pos.y = old_pos.y;  // Revert to old position
     }
 
     size_t old_mx = old_pos.x / SCALE;
     size_t old_my = old_pos.y / SCALE;
 
     for (float i = -PLAYER_SIZE / 2; i <= PLAYER_SIZE / 2; i++) {
-        size_t mx = (gs->player->pos.x + i) / SCALE;
+        size_t mx = (ss->player->pos.x + i) / SCALE;
         if (MAP[mx + old_my * MAP_WIDTH] != ' ') {
-            gs->player->pos.x =
+            ss->player->pos.x =
                 old_pos.x;  // Revert to old position if there's a collision
-            gs->player->pos.y = old_pos.y + (gs->player->pos.y - old_pos.y) *
+            ss->player->pos.y = old_pos.y + (ss->player->pos.y - old_pos.y) *
                                                 0.8;  // slowly glide along wall
             break;
         }
     }
 
     for (float i = -PLAYER_SIZE / 2; i <= PLAYER_SIZE / 2; i++) {
-        size_t my = (gs->player->pos.y + i) / SCALE;
+        size_t my = (ss->player->pos.y + i) / SCALE;
         if (MAP[old_mx + my * MAP_WIDTH] != ' ') {
-            gs->player->pos.y =
+            ss->player->pos.y =
                 old_pos.y;  // Revert to old position if there's a collision
-            gs->player->pos.x =
-                old_pos.x + (gs->player->pos.x - old_pos.x) * 0.8;
+            ss->player->pos.x =
+                old_pos.x + (ss->player->pos.x - old_pos.x) * 0.8;
             break;
         }
     }
@@ -166,22 +172,25 @@ void handle_wall_collision(GameState *gs, Vector2 old_pos) {
 
 // TODO
 void render_ceiling(GameState *gs) {
-    for (uint32_t j = 0; j <= (SCREEN_HEIGHT / 2 + gs->player->eye_z); j++) {
-        uint32_t colour =
-            darken_color(0xFFEBCE87, j, SCREEN_HEIGHT / 2 + gs->player->eye_z);
+    for (uint32_t j = 0;
+         j <= (SCREEN_HEIGHT / 2 + gs->sharedState->player->eye_z); j++) {
+        uint32_t colour = darken_color(
+            0xFFEBCE87, j, SCREEN_HEIGHT / 2 + gs->sharedState->player->eye_z);
 
-        draw_rectangle(gs->image, (Vector2i){0, j}, SCREEN_WIDTH, 1,
-                       SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+        draw_rectangle(gs->renderState->image, (Vector2i){0, j}, SCREEN_WIDTH,
+                       1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
     }
 }
 
 // TODO
 void render_floors(GameState *gs) {
-    for (uint32_t j = 0; j <= (SCREEN_HEIGHT / 2 - gs->player->eye_z); j++) {
-        uint32_t colour = darken_color(pack_colour(0x18, 0x18, 0x18, 0xFF), j,
-                                       SCREEN_HEIGHT / 2 - gs->player->eye_z);
+    for (uint32_t j = 0;
+         j <= (SCREEN_HEIGHT / 2 - gs->sharedState->player->eye_z); j++) {
+        uint32_t colour =
+            darken_color(pack_colour(0x18, 0x18, 0x18, 0xFF), j,
+                         SCREEN_HEIGHT / 2 - gs->sharedState->player->eye_z);
 
-        draw_rectangle(gs->image, (Vector2i){0, SCREEN_HEIGHT - j},
+        draw_rectangle(gs->renderState->image, (Vector2i){0, SCREEN_HEIGHT - j},
                        SCREEN_WIDTH, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
     }
 }
@@ -191,12 +200,13 @@ void draw_scene(GameState *gs) {
     render_floors(gs);
 
     for (uint32_t i = 0; i < SCREEN_WIDTH; i++) {
-        float theta = (gs->player->theta - gs->player->hfov / 2) +
-                      i * gs->player->hfov / SCREEN_WIDTH;
+        float theta = (gs->sharedState->player->theta -
+                       gs->sharedState->player->hfov / 2) +
+                      i * gs->sharedState->player->hfov / SCREEN_WIDTH;
 
         for (uint32_t j = NEAR_CLIPPING_PLANE; j <= FAR_CLIPPING_PLANE; j++) {
-            float cx = gs->player->pos.x + j * sin(theta);
-            float cy = gs->player->pos.y + j * cos(theta);
+            float cx = gs->sharedState->player->pos.x + j * sin(theta);
+            float cy = gs->sharedState->player->pos.y + j * cos(theta);
             if (cx >= WORLD_WIDTH || cy >= WORLD_HEIGHT || cx < 0 || cy < 0)
                 break;
 
@@ -209,10 +219,11 @@ void draw_scene(GameState *gs) {
             int textid = id - '0';
 
             float column_height =
-                WORLD_HEIGHT * 20 / (j * cos(theta - gs->player->theta));
+                WORLD_HEIGHT * 20 /
+                (j * cos(theta - gs->sharedState->player->theta));
             // 20 is the scaling factor for walls
 
-            if (!(textid >= 0 && textid < gs->walltext_cnt)) {
+            if (!(textid >= 0 && textid < gs->renderState->walltext_cnt)) {
                 fprintf(stderr,
                         "ERROR: missing/incorrect texture %d, setting to 0, "
                         "for position {%d, %d}\n",
@@ -225,24 +236,27 @@ void draw_scene(GameState *gs) {
             float hitx = mx - floor(mx + 0.5);
             float hity = my - floor(my + 0.5);
 
-            tx = hitx * gs->walltext_size;
+            tx = hitx * gs->renderState->walltext_size;
             if (fabsf(hity) > fabsf(hitx)) {
-                tx = hity * gs->walltext_size;
+                tx = hity * gs->renderState->walltext_size;
             }
-            if (tx < 0) tx += gs->walltext_size;
+            if (tx < 0) tx += gs->renderState->walltext_size;
 
             for (size_t y = 0; y < column_height; y++) {
-                ty = y * gs->walltext_size / column_height;
+                ty = y * gs->renderState->walltext_size / column_height;
                 uint32_t colour =
-                    gs->walltext[(tx + textid * gs->walltext_size) +
-                                 ty * (gs->walltext_size * gs->walltext_cnt)];
+                    gs->renderState
+                        ->walltext[(tx +
+                                    textid * gs->renderState->walltext_size) +
+                                   ty * (gs->renderState->walltext_size *
+                                         gs->renderState->walltext_cnt)];
                 colour = darken_color(colour, j, FAR_CLIPPING_PLANE);
 
                 draw_rectangle(
-                    gs->image,
-                    (Vector2i){SCREEN_WIDTH - i, SCREEN_HEIGHT / 2.0f -
-                                                     column_height / 2 +
-                                                     gs->player->eye_z + y},
+                    gs->renderState->image,
+                    (Vector2i){SCREEN_WIDTH - i,
+                               SCREEN_HEIGHT / 2.0f - column_height / 2 +
+                                   gs->sharedState->player->eye_z + y},
                     1, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
             }
 
@@ -252,13 +266,25 @@ void draw_scene(GameState *gs) {
 }
 
 void delete_state(GameState *gs) {
-    free(gs->image);
-    free(gs->minimap);
-    free(gs->walltext);
+    SDL_DestroyTexture(gs->renderState->texture);
+    SDL_DestroyRenderer(gs->renderState->renderer);
+    SDL_DestroyWindow(gs->renderState->window);
+
+    free(gs->renderState->image);
+    free(gs->renderState->minimap);
+    free(gs->renderState->walltext);
+    free(gs->renderState);
+    for (size_t i = 0; i < gs->text_count; i++) {
+        free(gs->texts[i].content);
+    }
     free(gs->texts);
-    SDL_DestroyTexture(gs->texture);
-    SDL_DestroyRenderer(gs->renderer);
-    SDL_DestroyWindow(gs->window);
+    free(gs->sharedState->player->id);
+    for (size_t i = 0; i < gs->sharedState->entity_count; i++) {
+        free(gs->sharedState->entities[i]);
+    }
+    free(gs->sharedState->entities);
+    free(gs->sharedState);
+
     SDL_Quit();
 }
 
@@ -301,65 +327,69 @@ void get_player_random_init(Player *player) {
 }
 
 bool init_state(GameState *gs) {
-    srand((unsigned int)time(NULL));
+    // srand((unsigned int)time(NULL));
+    srand(0);
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "ERROR: Failed to initialize SDL2: %s\n",
                 SDL_GetError());
         return false;
     }
 
-    gs->window =
+    gs->renderState->window =
         SDL_CreateWindow("Zorn", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                          SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_ALLOW_HIGHDPI);
-    if (!gs->window) {
+    if (!gs->renderState->window) {
         fprintf(stderr, "ERROR: Failed to create window: %s\n", SDL_GetError());
         SDL_Quit();
         return false;
     }
 
-    gs->renderer =
-        SDL_CreateRenderer(gs->window, -1, SDL_RENDERER_PRESENTVSYNC);
-    if (!gs->renderer) {
+    gs->renderState->renderer = SDL_CreateRenderer(gs->renderState->window, -1,
+                                                   SDL_RENDERER_PRESENTVSYNC);
+    if (!gs->renderState->renderer) {
         fprintf(stderr, "ERROR: Failed to create renderer: %s\n",
                 SDL_GetError());
-        SDL_DestroyWindow(gs->window);
+        SDL_DestroyWindow(gs->renderState->window);
         SDL_Quit();
         return false;
     }
 
-    gs->texture = SDL_CreateTexture(gs->renderer, SDL_PIXELFORMAT_ABGR8888,
-                                    SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH,
-                                    SCREEN_HEIGHT);
-    if (!gs->texture) {
+    gs->renderState->texture = SDL_CreateTexture(
+        gs->renderState->renderer, SDL_PIXELFORMAT_ABGR8888,
+        SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
+    if (!gs->renderState->texture) {
         fprintf(stderr, "ERROR: Failed to create texture: %s\n",
                 SDL_GetError());
-        SDL_DestroyWindow(gs->window);
+        SDL_DestroyWindow(gs->renderState->window);
         SDL_Quit();
         return false;
     }
 
-    SDL_UpdateTexture(gs->texture, NULL, (void *)(gs->image), SCREEN_WIDTH * 4);
-    SDL_RenderCopy(gs->renderer, gs->texture, NULL, NULL);
-    SDL_RenderPresent(gs->renderer);
+    SDL_UpdateTexture(gs->renderState->texture, NULL,
+                      (void *)(gs->renderState->image), SCREEN_WIDTH * 4);
+    SDL_RenderCopy(gs->renderState->renderer, gs->renderState->texture, NULL,
+                   NULL);
+    SDL_RenderPresent(gs->renderState->renderer);
 
-    gs->image =
+    gs->renderState->image =
         (uint32_t *)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
-    gs->minimap =
+    gs->renderState->minimap =
         (uint32_t *)malloc(MINIMAP_RANGE * MINIMAP_RANGE * sizeof(uint32_t));
 
-    if (gs->image == NULL) {
+    if (gs->renderState->image == NULL) {
         delete_state(gs);
         fprintf(stderr, "Memory allocation for image failed!\n");
         return false;
     }
-    if (gs->minimap == NULL) {
+    if (gs->renderState->minimap == NULL) {
         delete_state(gs);
         fprintf(stderr, "Memory allocation for minimap failed!\n");
         return false;
     }
 
-    if (!load_texture("assets/walltext.png", &(gs->walltext),
-                      &(gs->walltext_size), &(gs->walltext_cnt))) {
+    if (!load_texture("assets/walltext.png", &(gs->renderState->walltext),
+                      &(gs->renderState->walltext_size),
+                      &(gs->renderState->walltext_cnt))) {
         delete_state(gs);
         return false;
     }
@@ -384,12 +414,15 @@ bool init_state(GameState *gs) {
 
     gs->texts = realloc(gs->texts, sizeof(Text) * (gs->text_count + 1));
     Text *newText = &gs->texts[gs->text_count];
+    newText->type = FPS;
     newText->font = fps_font;
     newText->colour = fps_textColour;
     newText->position = fps_textRect;
     gs->text_count++;
 
-    get_player_random_init(gs->player);
+    get_player_random_init(gs->sharedState->player);
+
+    printf("New Player ID: %s\n", gs->sharedState->player->id);
 
     return true;
 }
@@ -398,7 +431,7 @@ int main() {
     assert(sizeof(MAP) == MAP_WIDTH * MAP_HEIGHT + 1);
 
     Player player = {
-        .id = 1,
+        .id = get_uuid(36),
         .pos = {0, 0},  // in world coordinates
         .theta = 0,     // 0 mean facing along y
         .eye_z = SCREEN_HEIGHT / 10.0f,
@@ -413,23 +446,39 @@ int main() {
     };
     player.velocity.y = player.speed;
 
-    GameState gs = {.window = NULL,
-                    .renderer = NULL,
-                    .texture = NULL,
-                    .image = NULL,
-                    .minimap = NULL,
-                    .player = &player,
-                    .walltext = NULL,
+    RenderState *rs = (RenderState *)malloc(sizeof(RenderState));
+    if (rs == NULL) {
+        fprintf(stderr, "ERROR: Could not malloc RenderState\n");
+        exit(1);
+    }
+    rs->window = NULL;
+    rs->renderer = NULL;
+    rs->texture = NULL;
+    rs->image = NULL;
+    rs->minimap = NULL;
+    rs->walltext = NULL;
+
+    SharedState *ss = (SharedState *)malloc(sizeof(SharedState));
+    if (ss == NULL) {
+        fprintf(stderr, "ERROR: Could not malloc SharedState\n");
+        exit(1);
+    }
+    ss->player = &player;
+    ss->entities = NULL;
+    ss->entity_count = 0;
+    ss->status = DISCONNECTED;
+    ss->game_load_state = INITIAL;
+
+    GameState gs = {.renderState = rs,
+                    .sharedState = ss,
                     .game_load_state = INITIAL,
                     .texts = NULL,
                     .text_count = 0};
 
     uint32_t start_time = 0;
-    if (gs.game_load_state == INITIAL) {
-        if (init_state(&gs)) gs.game_load_state = PLAYING;
-        SDL_RenderClear(gs.renderer);
-        start_time = SDL_GetTicks64();
-    }
+    if (init_state(&gs)) gs.game_load_state = PLAYING;
+    start_time = SDL_GetTicks64();
+
     while (!(gs.game_load_state == QUIT)) {
         float delta_time = (SDL_GetTicks64() - start_time) / 75.0f;
         start_time = SDL_GetTicks64();
@@ -448,31 +497,34 @@ int main() {
 
         const Uint8 *keystate = SDL_GetKeyboardState(NULL);
 
-        const Vector2 old_pos = gs.player->pos;
+        const Vector2 old_pos = gs.sharedState->player->pos;
 
         if (keystate[SDL_SCANCODE_W]) {
-            move_player(gs.player, delta_time, 1);  // Move forward
+            move_player(gs.sharedState->player, delta_time, 1);  // Move forward
         }
 
         if (keystate[SDL_SCANCODE_S]) {
-            move_player(gs.player, delta_time, -1);  // Move backward
+            move_player(gs.sharedState->player, delta_time,
+                        -1);  // Move backward
         }
 
         if (keystate[SDL_SCANCODE_A]) {
-            rotate_player(gs.player, delta_time, 1);  // Rotate left
+            rotate_player(gs.sharedState->player, delta_time,
+                          1);  // Rotate left
         }
 
         if (keystate[SDL_SCANCODE_D]) {
-            rotate_player(gs.player, delta_time, -1);  // Rotate right
+            rotate_player(gs.sharedState->player, delta_time,
+                          -1);  // Rotate right
         }
 
         if (keystate[SDL_SCANCODE_SPACE]) {
-            jump_player(gs.player, delta_time);
+            jump_player(gs.sharedState->player, delta_time);
         }
 
-        player_gravity(gs.player, delta_time);
+        player_gravity(gs.sharedState->player, delta_time);
 
-        handle_wall_collision(&gs, old_pos);
+        handle_wall_collision(gs.sharedState, old_pos);
 
         draw_minimap(&gs);
 
@@ -482,9 +534,10 @@ int main() {
         //                (Vector2i){SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2}, 2, 2,
         //                SCREEN_WIDTH, SCREEN_HEIGHT, 0xFF0000AA);
 
-        SDL_UpdateTexture(gs.texture, NULL, (void *)(gs.image),
-                          SCREEN_WIDTH * 4);
-        SDL_RenderCopy(gs.renderer, gs.texture, NULL, NULL);
+        SDL_UpdateTexture(gs.renderState->texture, NULL,
+                          (void *)(gs.renderState->image), SCREEN_WIDTH * 4);
+        SDL_RenderCopy(gs.renderState->renderer, gs.renderState->texture, NULL,
+                       NULL);
         for (size_t i = 0; i < gs.text_count; i++) {
             Text *text = &gs.texts[i];
             SDL_Surface *textSurface =
@@ -496,18 +549,19 @@ int main() {
                 return EXIT_FAILURE;
             }
 
-            SDL_Texture *textTexture =
-                SDL_CreateTextureFromSurface(gs.renderer, textSurface);
+            SDL_Texture *textTexture = SDL_CreateTextureFromSurface(
+                gs.renderState->renderer, textSurface);
 
             if (!textTexture) {
                 fprintf(stderr, "ERROR: Failed to create text texture: %s\n",
                         SDL_GetError());
                 return EXIT_FAILURE;
             }
-            SDL_RenderCopy(gs.renderer, textTexture, NULL, &text->position);
+            SDL_RenderCopy(gs.renderState->renderer, textTexture, NULL,
+                           &text->position);
         }
 
-        SDL_RenderPresent(gs.renderer);
+        SDL_RenderPresent(gs.renderState->renderer);
     }
 
     delete_state(&gs);
