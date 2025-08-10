@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS_DEBUG = -Wall -Wextra -Wpedantic -g -I$(COMMON_DIR)
-CFLAGS_RELEASE = -Wall -Wextra -O3 -I$(COMMON_DIR)
+CFLAGS_RELEASE = -Wall -Wextra -O3 -I$(COMMON_DIR) -march=native -funroll-loops -DNDEBUG
 SDL2_INCLUDE_PATH = $(shell pkg-config --cflags SDL2_ttf)
 SDL2_LIB_PATH = $(shell pkg-config --libs SDL2_ttf)
 LDFLAGS = -lm

@@ -141,7 +141,7 @@ bool init_state(GameState *gs) {
 
     gs->renderState->window =
         SDL_CreateWindow("Zorn", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                         SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_ALLOW_HIGHDPI);
+                         SCREEN_WIDTH, SCREEN_HEIGHT, 0);
     if (!gs->renderState->window) {
         fprintf(stderr, "ERROR: Failed to create window: %s\n", SDL_GetError());
         SDL_Quit();
@@ -149,7 +149,7 @@ bool init_state(GameState *gs) {
     }
 
     gs->renderState->renderer = SDL_CreateRenderer(gs->renderState->window, -1,
-                                                   SDL_RENDERER_PRESENTVSYNC);
+                                                   SDL_RENDERER_ACCELERATED);
     if (!gs->renderState->renderer) {
         fprintf(stderr, "ERROR: Failed to create renderer: %s\n",
                 SDL_GetError());
