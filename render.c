@@ -1,11 +1,17 @@
-
 #include "render.h"
 
 #include <math.h>
 #include <stdint.h>
 
 #include "constants.h"
+#include "player.h"
 #include "utilities.h"
+
+static inline void PUTPIX(uint32_t *buf, Vector2i pos, uint32_t colour) {
+    if (pos.y >= SCREEN_HEIGHT || pos.y < 0) return;
+    if (pos.x >= SCREEN_WIDTH || pos.x < 0) return;
+    buf[pos.x + pos.y * SCREEN_WIDTH] = colour;
+}
 
 void draw_rectangle(uint32_t *image, Vector2i pos, uint32_t w, uint32_t h,
                     uint32_t image_w, uint32_t image_h, uint32_t colour) {
@@ -118,25 +124,26 @@ void overlay_minimap(GameState *gs) {
 }
 
 void render_ceiling(GameState *gs) {
-    for (uint32_t j = 0;
-         j <= (SCREEN_HEIGHT / 2 + gs->sharedState->player->eye_z); j++) {
-        uint32_t colour = darken_color(
-            0xFFEBCE87, j, SCREEN_HEIGHT / 2 + gs->sharedState->player->eye_z);
-
-        draw_rectangle(gs->renderState->image, (Vector2i){0, j}, SCREEN_WIDTH,
-                       1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+    RenderState *rs = gs->renderState;
+    int top = (int)(SCREEN_HEIGHT / 2 + gs->sharedState->player->eye_z);
+    if (top < 0) top = 0;
+    uint32_t base = 0xFFEBCE87;
+    for (int j = 0; j <= top; ++j) {
+        uint32_t colour = darken_colour(base, 1);
+        uint32_t *row = &rs->image[j * SCREEN_WIDTH];
+        for (int x = 0; x < SCREEN_WIDTH; ++x) row[x] = colour;
     }
 }
 
 void render_floors(GameState *gs) {
-    for (uint32_t j = 0;
-         j <= (SCREEN_HEIGHT / 2 - gs->sharedState->player->eye_z); j++) {
-        uint32_t colour =
-            darken_color(pack_colour(0x18, 0x18, 0x18, 0xFF), j,
-                         SCREEN_HEIGHT / 2 - gs->sharedState->player->eye_z);
-
-        draw_rectangle(gs->renderState->image, (Vector2i){0, SCREEN_HEIGHT - j},
-                       SCREEN_WIDTH, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+    RenderState *rs = gs->renderState;
+    int top = (int)(SCREEN_HEIGHT / 2 + gs->sharedState->player->eye_z);
+    if (top < 0) top = 0;
+    uint32_t base = pack_colour(0x18, 0x18, 0x18, 0xFF);
+    for (int j = top; j < SCREEN_HEIGHT; ++j) {
+        uint32_t colour = darken_colour(base, 1);
+        uint32_t *row = &rs->image[j * SCREEN_WIDTH];
+        for (int x = 0; x < SCREEN_WIDTH; ++x) row[x] = colour;
     }
 }
 
@@ -144,14 +151,17 @@ void draw_scene(GameState *gs) {
     render_ceiling(gs);
     render_floors(gs);
 
-    for (uint32_t i = 0; i < SCREEN_WIDTH; i++) {
+    for (uint32_t i = 0; i < SCREEN_WIDTH; i += 1) {
         float theta = (gs->sharedState->player->theta -
                        gs->sharedState->player->hfov / 2) +
                       i * gs->sharedState->player->hfov / SCREEN_WIDTH;
 
+        float sint = sin(theta);
+        float cost = cos(theta);
+
         for (uint32_t j = NEAR_CLIPPING_PLANE; j <= FAR_CLIPPING_PLANE; j++) {
-            float cx = gs->sharedState->player->pos.x + j * sin(theta);
-            float cy = gs->sharedState->player->pos.y + j * cos(theta);
+            float cx = gs->sharedState->player->pos.x + j * sint;
+            float cy = gs->sharedState->player->pos.y + j * cost;
             if (cx >= WORLD_WIDTH || cy >= WORLD_HEIGHT || cx < 0 || cy < 0)
                 break;
 
@@ -180,10 +190,14 @@ void draw_scene(GameState *gs) {
 
             float hitx = mx - floor(mx + 0.5);
             float hity = my - floor(my + 0.5);
+            float shade_factor_base = 1.0f - (j / (float)FAR_CLIPPING_PLANE);
+            if (shade_factor_base < 0.2f) shade_factor_base = 0.2f;
 
-            tx = hitx * gs->renderState->walltext_size;
             if (fabsf(hity) > fabsf(hitx)) {
                 tx = hity * gs->renderState->walltext_size;
+                shade_factor_base *= 0.8;
+            } else {
+                tx = hitx * gs->renderState->walltext_size;
             }
             if (tx < 0) tx += gs->renderState->walltext_size;
 
@@ -195,14 +209,19 @@ void draw_scene(GameState *gs) {
                                     textid * gs->renderState->walltext_size) +
                                    ty * (gs->renderState->walltext_size *
                                          gs->renderState->walltext_cnt)];
-                colour = darken_color(colour, j, FAR_CLIPPING_PLANE);
+                colour = darken_colour(colour, 1);
 
-                draw_rectangle(
-                    gs->renderState->image,
-                    (Vector2i){SCREEN_WIDTH - i,
-                               SCREEN_HEIGHT / 2.0f - column_height / 2 +
-                                   gs->sharedState->player->eye_z + y},
-                    1, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+                // draw_rectangle(
+                //     gs->renderState->image,
+                //     (Vector2i){SCREEN_WIDTH - i,
+                //                SCREEN_HEIGHT / 2.0f - column_height / 2 +
+                //                    gs->sharedState->player->eye_z + y},
+                //     1, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
+                PUTPIX(gs->renderState->image,
+                       (Vector2i){SCREEN_WIDTH - i,
+                                  SCREEN_HEIGHT / 2.0f - column_height / 2 +
+                                      gs->sharedState->player->eye_z + y},
+                       colour);
             }
 
             break;

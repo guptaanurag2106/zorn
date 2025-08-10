@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define UTILS_IMPLEMENTATION
 #include "utils.h"
 
 #define BACKLOG 10

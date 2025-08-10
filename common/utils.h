@@ -2,10 +2,9 @@
 #define UTILS_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "stdio.h"
 
 #ifdef _cplusplus
 extern "C" {
@@ -28,27 +27,95 @@ extern "C" {
         _a > _b ? _b : _a;      \
     })
 
+char *shift(int *argc, char ***argv);
+char *get_uuid();
+
+// ----------------------------------------------------------------------------
+//  Log Utils
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+//  Math Utils
+// ----------------------------------------------------------------------------
+#define PI 3.14159265359f
+#define PI_2 (PI / 2)
+#define PI_3_4 (3.0f * PI / 4)
+
+#define DEG2RAD(_d) ((_d) * (PI / 180.0f))
+#define RAD2DEG(_r) ((_r) * (180.0f / PI))
+
+typedef struct Vector2 {
+    float x, y;
+} Vector2;
+
+typedef struct Vector2i {
+    int x, y;
+} Vector2i;
+
+static inline Vector2 add2D(Vector2 a, Vector2 b) {
+    return (Vector2){.x = a.x + b.x, .y = a.y + b.y};
+}
+static inline Vector2i add2Di(Vector2i a, Vector2i b) {
+    return (Vector2i){.x = a.x + b.x, .y = a.y + b.y};
+}
+
+typedef struct Vector3 {
+    float x, y, z;
+} Vector3;
+
+static inline uint32_t clamp_u32(uint32_t v, uint32_t lo, uint32_t hi) {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+// ----------------------------------------------------------------------------
+//  String Utils
+// ----------------------------------------------------------------------------
+void combine_charp(const char *str1, const char *str2, char **combined);
+
+// ----------------------------------------------------------------------------
+//  Vector Utils
+// ----------------------------------------------------------------------------
+typedef struct {
+    int *data;
+    size_t size;
+    size_t capacity;
+} Ivector;
+
+Ivector *init_Ivector(size_t init_cap);
+void resize_Ivector(Ivector *vector, size_t new_capacity);
+void push_back_Ivector(Ivector *vector, int val);
+int pop_back_Ivector(Ivector *vector);
+int get_Ivector(Ivector *vector, size_t pos);
+void reset_Ivector(Ivector *vector);
+
+#ifdef _cplusplus
+};
+#endif
+#endif  // UTILS_H
+
+#ifdef UTILS_IMPLEMENTATION
+
 char *shift(int *argc, char ***argv) {
     if (*argc <= 0) {
-        fprintf(stderr, "ERROR: `shift` requested with non-positive argc\n");
+        fprintf(stderr, "ERROR: [shift] Requested with non-positive argc\n");
         exit(1);
     }
     (*argc)--;
     return *((*argv)++);
 }
 
-char *get_uuid(uint8_t l) {
+char *get_uuid() {
     char v[] = {'0', '1', '2', '3', '4', '5', '6', '7',
                 '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-    // 3fb17ebc-bc38-4939-bc8b-74f2443281d4
-    // 8 dash 4 dash 4 dash 4 dash 12
-    char *buf = malloc(sizeof(char) * (l + 1));
+    char *buf = malloc(sizeof(char) * (37));
     if (buf == NULL) {
-        fprintf(stderr, "ERROR: Could not allocate buffer get_uuid\n");
+        fprintf(stderr, "ERROR: [get_uuid] Could not allocate buffer\n");
         exit(1);
     }
 
-    for (int i = 0; i < l; ++i) {
+    for (int i = 0; i < 36; ++i) {
         buf[i] = v[rand() % 16];
     }
 
@@ -62,38 +129,22 @@ char *get_uuid(uint8_t l) {
     return buf;
 }
 
-// ----------------------------------------------------------------------------
-//  Log Utils
-// ----------------------------------------------------------------------------
-
-// ----------------------------------------------------------------------------
-//  String Utils
-// ----------------------------------------------------------------------------
 void combine_charp(const char *str1, const char *str2, char **combined) {
     size_t length = strlen(str1) + strlen(str2) + 1;
     *combined = (char *)malloc(length);
 
     if (*combined == NULL) {
-        fprintf(stderr, "Failed to allocate memory");
+        fprintf(stderr, "ERROR: [combine_charp] Could not allocate buffer\n");
     }
 
     strcpy(*combined, str1);
     strcat(*combined, str2);
 }
 
-// ----------------------------------------------------------------------------
-//  Vector Utils
-// ----------------------------------------------------------------------------
-typedef struct {
-    int *data;
-    size_t size;
-    size_t capacity;
-} Ivector;
-
 Ivector *init_Ivector(size_t init_cap) {
     Ivector *vector = (Ivector *)malloc(sizeof(Ivector));
     if (vector == NULL) {
-        fprintf(stderr, "ERROR: Ivector_init malloc failed\n");
+        fprintf(stderr, "ERROR: [init_Ivector] Could not allocate Ivector\n");
         exit(1);
     }
 
@@ -120,7 +171,7 @@ void push_back_Ivector(Ivector *vector, int val) {
 int pop_back_Ivector(Ivector *vector) {
     if (vector->size == 0) {
         fprintf(stderr,
-                "ERROR: Ivector_pop_back cannot pop from empty vector\n");
+                "ERROR: [Ivector_pop_back] cannot pop from empty vector\n");
         exit(1);
     }
 
@@ -131,7 +182,7 @@ int pop_back_Ivector(Ivector *vector) {
 
 int get_Ivector(Ivector *vector, size_t pos) {
     if (pos >= vector->size) {
-        fprintf(stderr, "ERROR: Ivector_get index %zu out of bounds (%zu)\n",
+        fprintf(stderr, "ERROR: [Ivector_get] index %zu out of bounds (%zu)\n",
                 pos, vector->size);
         exit(1);
     }
@@ -144,7 +195,4 @@ void reset_Ivector(Ivector *vector) {
     vector->capacity = 0;
 }
 
-#ifdef _cplusplus
-};
-#endif
-#endif
+#endif  // UTILS_IMPLEMENTATION

@@ -17,23 +17,29 @@
 
 #include "constants.h"
 #include "game_state.h"
+#include "net.h"
 #include "player.h"
 #include "render.h"
 #include "textures.h"
 #include "utilities.h"
-#include "utils.h"
-#include "vector.h"
+
+#define UTILS_IMPLEMENTATION
+#include "common/utils.h"
 
 void handle_wall_collision(SharedState *ss, Vector2 old_pos) {
+    bool moved = false;
     if (ss->player->pos.x - PLAYER_SIZE / 2 < 0 ||
         ss->player->pos.x + PLAYER_SIZE / 2 >= WORLD_WIDTH) {
         ss->player->pos.x = old_pos.x;  // Revert to old position
+        moved = true;
     }
 
     if (ss->player->pos.y - PLAYER_SIZE / 2 < 0 ||
         ss->player->pos.y + PLAYER_SIZE / 2 >= WORLD_HEIGHT) {
         ss->player->pos.y = old_pos.y;  // Revert to old position
-    }
+    } else
+        moved = false;
+    if (moved) return;
 
     size_t old_mx = old_pos.x / SCALE;
     size_t old_my = old_pos.y / SCALE;
@@ -79,6 +85,7 @@ void delete_state(GameState *gs) {
         free(gs->sharedState->entities[i]);
     }
     free(gs->sharedState->entities);
+    pthread_mutex_destroy(&gs->sharedState->lock);
     free(gs->sharedState);
 
     SDL_Quit();
@@ -123,6 +130,7 @@ void get_player_random_init(Player *player) {
 }
 
 bool init_state(GameState *gs) {
+    if (gs->game_load_state != INITIAL) return true;
     // srand((unsigned int)time(NULL));
     srand(0);
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -161,11 +169,11 @@ bool init_state(GameState *gs) {
         return false;
     }
 
-    SDL_UpdateTexture(gs->renderState->texture, NULL,
-                      (void *)(gs->renderState->image), SCREEN_WIDTH * 4);
-    SDL_RenderCopy(gs->renderState->renderer, gs->renderState->texture, NULL,
-                   NULL);
-    SDL_RenderPresent(gs->renderState->renderer);
+    // SDL_UpdateTexture(gs->renderState->texture, NULL,
+    //                   (void *)(gs->renderState->image), SCREEN_WIDTH * 4);
+    // SDL_RenderCopy(gs->renderState->renderer, gs->renderState->texture, NULL,
+    //                NULL);
+    // SDL_RenderPresent(gs->renderState->renderer);
 
     gs->renderState->image =
         (uint32_t *)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
@@ -215,6 +223,7 @@ bool init_state(GameState *gs) {
     newText->colour = fps_textColour;
     newText->position = fps_textRect;
     gs->text_count++;
+    gs->texts[0].content = malloc(sizeof(char) * 15);
 
     get_player_random_init(gs->sharedState->player);
 
@@ -226,7 +235,7 @@ int main() {
     assert(sizeof(MAP) == MAP_WIDTH * MAP_HEIGHT + 1);
 
     Player player = {
-        .id = get_uuid(36),
+        .id = get_uuid(),
         .pos = {0, 0},  // in world coordinates
         .theta = 0,     // 0 mean facing along y
         .eye_z = SCREEN_HEIGHT / 10.0f,
@@ -259,7 +268,7 @@ int main() {
         exit(1);
     }
     ss->player = &player;
-    ss->entities = NULL;
+    ss->entities = (Entity **)malloc(sizeof(Entity **));
     ss->entity_count = 0;
     ss->status = DISCONNECTED;
     ss->game_load_state = INITIAL;
@@ -273,10 +282,19 @@ int main() {
     uint32_t start_time = 0;
     if (init_state(&gs)) gs.game_load_state = PLAYING;
     printf("New Player ID: %s\n", gs.sharedState->player->id);
+
+    pthread_t net_thread;
+    if (pthread_create(&net_thread, NULL, network_thread,
+                       (void *)gs.sharedState) < 0) {
+        fprintf(stderr, "ERROR: Could not create net_thread\n");
+        exit(1);  // TODO: Switch to offline mode?
+    }
+
     start_time = SDL_GetTicks64();
+    float max1 = 0;
 
     while (!(gs.game_load_state == QUIT)) {
-        float delta_time = (SDL_GetTicks64() - start_time) / 75.0f;
+        float delta_time = (SDL_GetTicks64() - start_time);
         start_time = SDL_GetTicks64();
 
         SDL_Event ev;
@@ -288,13 +306,16 @@ int main() {
             }
         }
 
-        gs.texts[0].content = malloc(sizeof(char) * 15);
         sprintf(gs.texts[0].content, "FPS: %.0f", 1000 / delta_time);
+        if (delta_time != 0 && 1000 / delta_time > max1) {
+            max1 = 1000 / delta_time;
+        }
+        delta_time = delta_time / 75.0f;
 
         const Uint8 *keystate = SDL_GetKeyboardState(NULL);
 
+        pthread_mutex_lock(&gs.sharedState->lock);
         const Vector2 old_pos = gs.sharedState->player->pos;
-
         if (keystate[SDL_SCANCODE_W]) {
             move_player(gs.sharedState->player, delta_time, 1);  // Move forward
         }
@@ -317,10 +338,9 @@ int main() {
         if (keystate[SDL_SCANCODE_SPACE]) {
             jump_player(gs.sharedState->player, delta_time);
         }
-
         player_gravity(gs.sharedState->player, delta_time);
-
         handle_wall_collision(gs.sharedState, old_pos);
+        pthread_mutex_unlock(&gs.sharedState->lock);
 
         draw_minimap(&gs);
 
@@ -330,6 +350,7 @@ int main() {
         //                (Vector2i){SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2}, 2, 2,
         //                SCREEN_WIDTH, SCREEN_HEIGHT, 0xFF0000AA);
 
+        SDL_RenderClear(gs.renderState->renderer);
         SDL_UpdateTexture(gs.renderState->texture, NULL,
                           (void *)(gs.renderState->image), SCREEN_WIDTH * 4);
         SDL_RenderCopy(gs.renderState->renderer, gs.renderState->texture, NULL,
@@ -360,6 +381,7 @@ int main() {
         SDL_RenderPresent(gs.renderState->renderer);
     }
 
+    printf("%f\n", max1);
     delete_state(&gs);
 
     return 0;

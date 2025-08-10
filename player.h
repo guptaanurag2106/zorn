@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "vector.h"
+#include "common/utils.h"
 
 typedef struct Player {
     char *id;
