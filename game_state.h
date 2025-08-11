@@ -8,7 +8,7 @@
 
 #include "player.h"
 
-enum TextType { FPS };
+enum TextType { FPS_Text };
 
 typedef struct Text {
     enum TextType type;

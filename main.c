@@ -218,7 +218,7 @@ bool init_state(GameState *gs) {
 
     gs->texts = realloc(gs->texts, sizeof(Text) * (gs->text_count + 1));
     Text *newText = &gs->texts[gs->text_count];
-    newText->type = FPS;
+    newText->type = FPS_Text;
     newText->font = fps_font;
     newText->colour = fps_textColour;
     newText->position = fps_textRect;
@@ -293,8 +293,22 @@ int main() {
     start_time = SDL_GetTicks64();
     float max1 = 0;
 
+#ifdef FPS_CAP
+#ifndef FPS_TARGET
+#define FPS_TARGET 100.0f
+#endif
+#define FRAME_DELTA 1000.0 / FPS_TARGET
+#endif
+
     while (!(gs.game_load_state == QUIT)) {
         float delta_time = (SDL_GetTicks64() - start_time);
+
+#ifdef FPS_CAP
+        if (FRAME_DELTA > delta_time) {
+            SDL_Delay(FRAME_DELTA - delta_time);
+            continue;
+        }
+#endif
         start_time = SDL_GetTicks64();
 
         SDL_Event ev;
@@ -310,8 +324,8 @@ int main() {
         if (delta_time != 0 && 1000 / delta_time > max1) {
             max1 = 1000 / delta_time;
         }
-        delta_time = delta_time / 75.0f;
 
+        delta_time = delta_time / 75.0f;
         const Uint8 *keystate = SDL_GetKeyboardState(NULL);
 
         pthread_mutex_lock(&gs.sharedState->lock);
@@ -381,7 +395,7 @@ int main() {
         SDL_RenderPresent(gs.renderState->renderer);
     }
 
-    printf("%f\n", max1);
+    printf("Max FPS:%f\n", max1);
     delete_state(&gs);
 
     return 0;

@@ -27,6 +27,19 @@ extern "C" {
         _a > _b ? _b : _a;      \
     })
 
+#if defined(__clang__) || defined(__GNUC__)
+#define ARRAY_LENGTH(arr)                                             \
+    (sizeof(arr) / sizeof((arr)[0]) +                                 \
+     0 * sizeof(struct {                                              \
+         int _ : !__builtin_types_compatible_p(__typeof__(arr),       \
+                                               __typeof__(&(arr)[0])) \
+                 ? 1                                                  \
+                 : -1;                                                \
+     }))
+#else
+#define ARRAY_LENGTH(arr) (sizeof(arr) / sizeof((arr)[0]))
+#endif
+
 char *shift(int *argc, char ***argv);
 char *get_uuid();
 
