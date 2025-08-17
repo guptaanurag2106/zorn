@@ -87,8 +87,6 @@ static inline uint32_t clamp_u32(uint32_t v, uint32_t lo, uint32_t hi) {
 //  String Utils
 // ----------------------------------------------------------------------------
 #define UTILS_MAX_TEMP_SIZE 1024
-static char utils_static_payload_buffer[UTILS_MAX_TEMP_SIZE];
-static char utils_static_temp_buffer[UTILS_MAX_TEMP_SIZE];
 // Will malloc combined, free it yourself
 void combine_charp(const char *str1, const char *str2, char **combined);
 // Will use the utils_static_payload_buffer and reset it everytime
@@ -122,6 +120,8 @@ void reset_Ivector(Ivector *vector);
 #endif  // UTILS_H
 
 #ifdef UTILS_IMPLEMENTATION
+static char utils_static_payload_buffer[UTILS_MAX_TEMP_SIZE];
+static char utils_static_temp_buffer[UTILS_MAX_TEMP_SIZE];
 
 char *shift(int *argc, char ***argv) {
     if (*argc <= 0) {

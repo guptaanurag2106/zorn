@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -11,63 +13,109 @@
 #define BACKLOG 10
 #define TICK_RATE 30  // Hz
 
+typedef struct Message {
+    char protocol_version[PROTOCOL_LEN + 1];
+    uint8_t packet_type;
+    uint16_t payload_length;
+    char msg[MAX_MESSAGE_SIZE];  // Actually MAX_MESSAGE_SIZE -
+                                 // MSG_HEADER_SIZE];
+} Message;
+
 typedef struct Client {
     int new_socket_fd;
     struct sockaddr_in client_address;
-    char buf[MAX_PAYLOAD_SIZE];
+    Message last_message;
+    char *buffer;
+
+    int buffer_offset;  // Current offset in the buffer
 } Client;
 
-typedef struct Message {
-} Message;
-
 typedef struct {
-    clock_t last_time;
+    struct timespec last_time;
     float frequency;
 } Timer;
-void call_if_due(Timer *timer, void (*func)(void *), void *arg) {
-    clock_t current_time = clock();
-    float diff = (float)(current_time - timer->last_time) / CLOCKS_PER_SEC -
-                 1.0 / timer->frequency;
+void call_if_due(Timer *timer, void (*func)(Client *), Client *arg) {
+    struct timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
+    int diff = (current_time.tv_sec - timer->last_time.tv_sec) * 1000000 +
+               (current_time.tv_nsec - timer->last_time.tv_nsec) / 1000 -
+               1000000 / timer->frequency;
 
-    if (diff) {
-        func(arg);
+    if (diff >= 0) {
         timer->last_time = current_time;
+        func(arg);
     } else
-        usleep(diff * 1000 * 1000);
+        usleep(-1 * diff);
 }
 
-void handle_client(void *arg) {
-    Client *args = (Client *)arg;
-    char *buf = args->buf;
-    size_t n = recv(args->new_socket_fd, buf, sizeof(buf), 0);
-    if (n == 0) return;
-    buf[n] = '\0';
+void handle_client(Client *arg) {
+    Message *message = &arg->last_message;
+    int bytes_received =
+        recv(arg->new_socket_fd, arg->buffer + arg->buffer_offset,
+             MAX_MESSAGE_SIZE * 2 - arg->buffer_offset, 0);
+    if (bytes_received == 0) return;
 
-    printf("INFO: client %d says %zu %s\n", args->new_socket_fd, n, buf);
+    if (bytes_received < 0) {
+        fprintf(stderr, "WARN: recv error for client %d: %s\n",
+                arg->new_socket_fd, strerror(errno));
+        return;
+    }
+    arg->buffer_offset += bytes_received;
+
+    while (arg->buffer_offset >= MSG_HEADER_SIZE) {
+        int ret =
+            sscanf(arg->buffer, "%3s|%02d|%4hd|", &message->protocol_version,
+                   &message->packet_type, &message->payload_length);
+
+        if (ret != 3) {
+            fprintf(stderr, "ERROR: client %d malformed packet received %s\n",
+                    arg->new_socket_fd, arg->buffer);
+            // TODO: return for now but handle later
+            return;
+        }
+
+        strncpy(message->msg, arg->buffer + MSG_HEADER_SIZE,
+                message->payload_length);
+
+        printf("INFO: Client %d recv ver: %s, type: %d, msg: %.*s\n",
+               arg->new_socket_fd, message->protocol_version,
+               message->packet_type, message->payload_length, message->msg);
+
+        int remaining =
+            arg->buffer_offset - MSG_HEADER_SIZE - message->payload_length;
+        memmove(arg->buffer,
+                arg->buffer + (MSG_HEADER_SIZE + message->payload_length),
+                remaining);
+        arg->buffer_offset = remaining;
+    }
 }
 
 void *pthread_routine(void *arg) {
     Client *args = (Client *)arg;
+    args->buffer = (char *)malloc(sizeof(char) * MAX_MESSAGE_SIZE * 2);
+    if (args->buffer == NULL) {
+        fprintf(stderr, "ERROR: Can't allocate client buffer\n");
+        close(args->new_socket_fd);
+        free(args);
+    }
+    memset(&args->last_message, 0, sizeof(Message));
+    args->buffer_offset = 0;
     printf("INFO: Client %d connected\n", args->new_socket_fd);
 
-    Timer tick_timer = {0, TICK_RATE};
+    Timer tick_timer = {.frequency = TICK_RATE};
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tick_timer.last_time);
 
     while (1) {
-        // call_if_due(&tick_timer, handle_client, arg);
-        char *buf = args->buf;
-        size_t n = recv(args->new_socket_fd, buf, MAX_PAYLOAD_SIZE, 0);
-        if (n == 0) continue;
-        buf[n] = '\0';
-        printf("INFO: client %d says %zu %s\n", args->new_socket_fd, n, buf);
+        call_if_due(&tick_timer, handle_client, args);
     }
 
     close(args->new_socket_fd);
+    free(args->buffer);
     free(args);
     return NULL;
 }
 
 int main(int argc, char **argv) {
-    printf("Hello server\n");
     char *prog_name = shift(&argc, &argv);
 
     const int sockfd = socket(PF_INET, SOCK_STREAM, 0);

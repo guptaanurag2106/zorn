@@ -12,16 +12,16 @@
 #include <unistd.h>
 
 #include "game_state.h"
-#include "net_stuff.h"
 
 #define PROTOCOL_MAJORV 0
 #define PROTOCOL_MINORV 1
+#include "net_stuff.h"
 
-#define SENDM(fd, type, ...)                                       \
-    ({                                                             \
-        char *packet = COMBINE("", __VA_ARGS__);                   \
-        sendm_(fd, temp_sprintf("%s|%02d|%d|%s", PROTOCOL_V, type, \
-                                strlen(packet), packet));          \
+#define SENDM(fd, type, ...)                                         \
+    ({                                                               \
+        char *packet = COMBINE("", __VA_ARGS__);                     \
+        sendm_(fd, temp_sprintf("%s|%02d|%04d|%s", PROTOCOL_V, type, \
+                                strlen(packet), packet));            \
     })
 
 typedef struct {
@@ -44,7 +44,6 @@ void call_if_due(Timer *timer, void (*func)(void *), void *arg) {
 
 int sendm_(int fd, const char *message) {
     printf("INFO: sending %lu: %s\n", strlen(message), message);
-    send(fd, message, strlen(message), 0);
     return send(fd, message, strlen(message), 0);
     // printf("%s", packet);                                             \
         // size_t packet_len = strlen(packet);                               \
@@ -89,6 +88,7 @@ void *network_thread(void *arg) {
     for (i = 0; i < MAX_CONNECT_RETRIES; i++) {
         if (connect(ns->fd, (struct sockaddr *)&(ns->serv_addr), addr_size) <
             0) {
+            // TODO: sleep
             fprintf(stderr, "ERROR: connect error, TRIES: %d/%d\n", i + 1,
                     MAX_CONNECT_RETRIES);
         } else {

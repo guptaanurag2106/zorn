@@ -138,8 +138,7 @@ void get_player_random_init(Player *player) {
 
 bool init_state(GameState *gs) {
     if (gs->game_load_state != INITIAL) return true;
-    // srand((unsigned int)time(NULL));
-    srand(0);
+    srand((unsigned int)time(NULL));
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "ERROR: Failed to initialize SDL2: %s\n",
                 SDL_GetError());
