@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "constants.h"
+#include "game_state.h"
 #include "player.h"
 #include "utilities.h"
 
@@ -15,10 +16,10 @@ static inline void PUTPIX(uint32_t *buf, Vector2i pos, uint32_t colour) {
 
 void draw_rectangle(uint32_t *image, Vector2i pos, uint32_t w, uint32_t h,
                     uint32_t image_w, uint32_t image_h, uint32_t colour) {
-    for (int i = 0; i < w; i++) {
+    for (uint32_t i = 0; i < w; i++) {
         int cx = pos.x + i;
         if (cx >= image_w) break;
-        for (int j = 0; j < h; j++) {
+        for (uint32_t j = 0; j < h; j++) {
             int cy = pos.y + j;
             if (cy >= image_h) break;
             image[cx + cy * image_w] = colour;
@@ -60,8 +61,7 @@ void draw_minimap(GameState *gs) {
             uint32_t cy =
                 ((gs->sharedState->player->pos.y - MINIMAP_RANGE / 2) + j) /
                 SCALE;
-            if (cx >= MAP_WIDTH || cy >= MAP_HEIGHT || cx < 0 || cy < 0)
-                continue;
+            if (cx >= MAP_WIDTH || cy >= MAP_HEIGHT) continue;
 
             if (MAP[cx + cy * MAP_WIDTH] == ' ') {
                 draw_rectangle(gs->renderState->minimap, (Vector2i){i, j}, 1, 1,
@@ -97,10 +97,8 @@ void overlay_minimap(GameState *gs) {
             int dy = y - center_y;
 
             if (dx * dx + dy * dy <= radius * radius) {
-                int rotated_x =
-                    (int)(cos_theta * dx - sin_theta * dy) + center_x;
-                int rotated_y =
-                    (int)(sin_theta * dx + cos_theta * dy) + center_y;
+                float rotated_x = (cos_theta * dx - sin_theta * dy) + center_x;
+                float rotated_y = (sin_theta * dx + cos_theta * dy) + center_y;
 
                 if (rotated_x >= 0 && rotated_x < minimap_width &&
                     rotated_y >= 0 && rotated_y < minimap_height) {
@@ -151,17 +149,23 @@ void draw_scene(GameState *gs) {
     render_ceiling(gs);
     render_floors(gs);
 
+    SharedState *ss = gs->sharedState;
+    Player *p = ss->player;
+    const float half_hfov = p->hfov * 0.5f;
+    const float theta_start = p->theta - half_hfov;
+    const float dtheta = p->hfov / (float)SCREEN_WIDTH;
+    const size_t walltext_cnt = gs->renderState->walltext_cnt;
+    const size_t walltext_size = gs->renderState->walltext_size;
+
     for (uint32_t i = 0; i < SCREEN_WIDTH; i += 1) {
-        float theta = (gs->sharedState->player->theta -
-                       gs->sharedState->player->hfov / 2) +
-                      i * gs->sharedState->player->hfov / SCREEN_WIDTH;
+        float theta = theta_start + i * dtheta;
 
         float sint = sin(theta);
         float cost = cos(theta);
 
         for (uint32_t j = NEAR_CLIPPING_PLANE; j <= FAR_CLIPPING_PLANE; j++) {
-            float cx = gs->sharedState->player->pos.x + j * sint;
-            float cy = gs->sharedState->player->pos.y + j * cost;
+            float cx = p->pos.x + j * sint;
+            float cy = p->pos.y + j * cost;
             if (cx >= WORLD_WIDTH || cy >= WORLD_HEIGHT || cx < 0 || cy < 0)
                 break;
 
@@ -171,16 +175,15 @@ void draw_scene(GameState *gs) {
             if (id == ' ')  // floor
                 continue;
 
-            int textid = id - '0';
+            size_t textid = id - '0';
 
             float column_height =
-                WORLD_HEIGHT * 20 /
-                (j * cos(theta - gs->sharedState->player->theta));
+                WORLD_HEIGHT * 20 / (j * cos(theta - p->theta));
             // 20 is the scaling factor for walls
 
-            if (!(textid >= 0 && textid < gs->renderState->walltext_cnt)) {
+            if (textid >= walltext_cnt) {
                 fprintf(stderr,
-                        "ERROR: missing/incorrect texture %d, setting to 0, "
+                        "ERROR: missing/incorrect texture %zu, setting to 0, "
                         "for position {%d, %d}\n",
                         textid, (int)mx, (int)my);
                 textid = 0;
@@ -194,33 +197,25 @@ void draw_scene(GameState *gs) {
             if (shade_factor_base < 0.2f) shade_factor_base = 0.2f;
 
             if (fabsf(hity) > fabsf(hitx)) {
-                tx = hity * gs->renderState->walltext_size;
+                tx = hity * walltext_size;
                 shade_factor_base *= 0.8;
             } else {
-                tx = hitx * gs->renderState->walltext_size;
+                tx = hitx * walltext_size;
             }
-            if (tx < 0) tx += gs->renderState->walltext_size;
+            if (tx < 0) tx += walltext_size;
 
             for (size_t y = 0; y < column_height; y++) {
-                ty = y * gs->renderState->walltext_size / column_height;
+                ty = y * walltext_size / column_height;
                 uint32_t colour =
                     gs->renderState
-                        ->walltext[(tx +
-                                    textid * gs->renderState->walltext_size) +
-                                   ty * (gs->renderState->walltext_size *
-                                         gs->renderState->walltext_cnt)];
+                        ->walltext[(tx + textid * walltext_size) +
+                                   ty * (walltext_size * walltext_cnt)];
                 colour = darken_colour(colour, 1);
 
-                // draw_rectangle(
-                //     gs->renderState->image,
-                //     (Vector2i){SCREEN_WIDTH - i,
-                //                SCREEN_HEIGHT / 2.0f - column_height / 2 +
-                //                    gs->sharedState->player->eye_z + y},
-                //     1, 1, SCREEN_WIDTH, SCREEN_HEIGHT, colour);
                 PUTPIX(gs->renderState->image,
-                       (Vector2i){SCREEN_WIDTH - i,
-                                  SCREEN_HEIGHT / 2.0f - column_height / 2 +
-                                      gs->sharedState->player->eye_z + y},
+                       (Vector2i){SCREEN_WIDTH - i, SCREEN_HEIGHT / 2.0f -
+                                                        column_height / 2 +
+                                                        p->eye_z + y},
                        colour);
             }
 

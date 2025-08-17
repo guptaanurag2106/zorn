@@ -1,6 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,7 +86,19 @@ static inline uint32_t clamp_u32(uint32_t v, uint32_t lo, uint32_t hi) {
 // ----------------------------------------------------------------------------
 //  String Utils
 // ----------------------------------------------------------------------------
+#define UTILS_MAX_TEMP_SIZE 1024
+static char utils_static_payload_buffer[UTILS_MAX_TEMP_SIZE];
+static char utils_static_temp_buffer[UTILS_MAX_TEMP_SIZE];
+// Will malloc combined, free it yourself
 void combine_charp(const char *str1, const char *str2, char **combined);
+// Will use the utils_static_payload_buffer and reset it everytime
+#define COMBINE(separator, ...) \
+    combine_strings_with_sep_(separator, __VA_ARGS__, NULL)
+// Will use the utils_static_payload_buffer and reset it everytime, last va_arg
+// should be NULL
+char *combine_strings_with_sep_(const char *separator, ...);
+// Will use the utils_static_temp_buffer and reset it everytime
+char *temp_sprintf(const char *format, ...);
 
 // ----------------------------------------------------------------------------
 //  Vector Utils
@@ -148,10 +161,65 @@ void combine_charp(const char *str1, const char *str2, char **combined) {
 
     if (*combined == NULL) {
         fprintf(stderr, "ERROR: [combine_charp] Could not allocate buffer\n");
+        return;
     }
 
     strcpy(*combined, str1);
     strcat(*combined, str2);
+}
+
+char *combine_strings_with_sep_(const char *separator, ...) {
+    va_list args;
+    va_start(args, separator);
+    const char *str = va_arg(args, const char *);
+    int count = 0;
+    while (str != NULL) {
+        str = va_arg(args, const char *);
+        count++;
+    }
+    va_end(args);
+
+    va_start(args, separator);
+    size_t offset = 0;
+    str = va_arg(args, const char *);
+    for (int i = 0; i < count; i++) {
+        size_t len = strlen(str);
+        memcpy(utils_static_payload_buffer + offset, str, len);
+        offset += len;
+        if (i < count - 1) {
+            memcpy(utils_static_payload_buffer + offset, separator,
+                   strlen(separator));
+            offset += strlen(separator);
+        }
+
+        str = va_arg(args, const char *);
+    }
+    va_end(args);
+    utils_static_payload_buffer[offset] = '\0';
+    return utils_static_payload_buffer;
+}
+
+char *temp_sprintf(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int n = vsnprintf(NULL, 0, format, args);
+    va_end(args);
+    if (n < 0) {
+        fprintf(stderr, "ERROR: [temp_sprintf] vsnprintf returned neg size\n");
+        return NULL;
+    }
+    if (n >= UTILS_MAX_TEMP_SIZE) {
+        fprintf(stderr,
+                "ERROR: [temp_sprintf] vsnprintf returned size greater than "
+                "UTILS_MAX_TEMP_SIZE\n");
+        return NULL;
+    }
+
+    va_start(args, format);
+    vsnprintf(utils_static_temp_buffer, UTILS_MAX_TEMP_SIZE, format, args);
+    va_end(args);
+
+    return utils_static_temp_buffer;
 }
 
 Ivector *init_Ivector(size_t init_cap) {

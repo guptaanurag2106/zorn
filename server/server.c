@@ -1,29 +1,66 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #define UTILS_IMPLEMENTATION
+#include "net_stuff.h"
 #include "utils.h"
 
 #define BACKLOG 10
+#define TICK_RATE 30  // Hz
 
-typedef struct pthread_arg_t {
+typedef struct Client {
     int new_socket_fd;
     struct sockaddr_in client_address;
-} pthread_arg_t;
+    char buf[MAX_PAYLOAD_SIZE];
+} Client;
+
+typedef struct Message {
+} Message;
+
+typedef struct {
+    clock_t last_time;
+    float frequency;
+} Timer;
+void call_if_due(Timer *timer, void (*func)(void *), void *arg) {
+    clock_t current_time = clock();
+    float diff = (float)(current_time - timer->last_time) / CLOCKS_PER_SEC -
+                 1.0 / timer->frequency;
+
+    if (diff) {
+        func(arg);
+        timer->last_time = current_time;
+    } else
+        usleep(diff * 1000 * 1000);
+}
+
+void handle_client(void *arg) {
+    Client *args = (Client *)arg;
+    char *buf = args->buf;
+    size_t n = recv(args->new_socket_fd, buf, sizeof(buf), 0);
+    if (n == 0) return;
+    buf[n] = '\0';
+
+    printf("INFO: client %d says %zu %s\n", args->new_socket_fd, n, buf);
+}
 
 void *pthread_routine(void *arg) {
-    pthread_arg_t *args = (pthread_arg_t *)arg;
-    printf("args: %d\n", args->new_socket_fd);
-    char buf[128];
-    recv(args->new_socket_fd, buf, sizeof(buf), 0);
+    Client *args = (Client *)arg;
+    printf("INFO: Client %d connected\n", args->new_socket_fd);
 
-    printf("client %d says %s\n", args->new_socket_fd, buf);
+    Timer tick_timer = {0, TICK_RATE};
+
+    while (1) {
+        // call_if_due(&tick_timer, handle_client, arg);
+        char *buf = args->buf;
+        size_t n = recv(args->new_socket_fd, buf, MAX_PAYLOAD_SIZE, 0);
+        if (n == 0) continue;
+        buf[n] = '\0';
+        printf("INFO: client %d says %zu %s\n", args->new_socket_fd, n, buf);
+    }
+
     close(args->new_socket_fd);
     free(args);
     return NULL;
@@ -84,8 +121,7 @@ int main(int argc, char **argv) {
     }
 
     while (1) {
-        pthread_arg_t *pthread_arg =
-            (pthread_arg_t *)malloc(sizeof(pthread_arg_t));
+        Client *pthread_arg = (Client *)malloc(sizeof(Client));
         if (pthread_arg == NULL) {
             fprintf(stderr, "ERROR: cant allocate pthread_arg_t\n");
             exit(1);
@@ -105,7 +141,10 @@ int main(int argc, char **argv) {
 
         if (pthread_create(&pthread, &pthread_attr, pthread_routine,
                            (void *)pthread_arg) != 0) {
-            fprintf(stderr, "ERROR: cant create new thread\n");
+            fprintf(stderr, "ERROR: cant create new thread, for client: %d\n",
+                    cfd);
+            fprintf(stderr, "ERROR: CLIENT NOT CONNECTED\n");
+            // TODO:send message to client
             free(pthread_arg);
         }
     }

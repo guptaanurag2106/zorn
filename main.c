@@ -13,11 +13,15 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
+#include "SDL_pixels.h"
+#include "SDL_rect.h"
 #include "constants.h"
 #include "game_state.h"
 #include "net.h"
+#include "net_stuff.h"
 #include "player.h"
 #include "render.h"
 #include "textures.h"
@@ -68,6 +72,7 @@ void handle_wall_collision(SharedState *ss, Vector2 old_pos) {
 }
 
 void delete_state(GameState *gs) {
+    printf("INFO: Starting delete_state\n");
     SDL_DestroyTexture(gs->renderState->texture);
     SDL_DestroyRenderer(gs->renderState->renderer);
     SDL_DestroyWindow(gs->renderState->window);
@@ -76,11 +81,12 @@ void delete_state(GameState *gs) {
     free(gs->renderState->minimap);
     free(gs->renderState->walltext);
     free(gs->renderState);
+
     for (size_t i = 0; i < gs->text_count; i++) {
         free(gs->texts[i].content);
     }
     free(gs->texts);
-    free(gs->sharedState->player->id);
+
     for (size_t i = 0; i < gs->sharedState->entity_count; i++) {
         free(gs->sharedState->entities[i]);
     }
@@ -89,6 +95,7 @@ void delete_state(GameState *gs) {
     free(gs->sharedState);
 
     SDL_Quit();
+    printf("INFO: Finished delete_state\n");
 }
 
 void get_player_random_init(Player *player) {
@@ -169,12 +176,6 @@ bool init_state(GameState *gs) {
         return false;
     }
 
-    // SDL_UpdateTexture(gs->renderState->texture, NULL,
-    //                   (void *)(gs->renderState->image), SCREEN_WIDTH * 4);
-    // SDL_RenderCopy(gs->renderState->renderer, gs->renderState->texture, NULL,
-    //                NULL);
-    // SDL_RenderPresent(gs->renderState->renderer);
-
     gs->renderState->image =
         (uint32_t *)malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
     gs->renderState->minimap =
@@ -206,6 +207,7 @@ bool init_state(GameState *gs) {
     gs->texts = NULL;
     char *font_file =
         "/usr/share/fonts/TTF/InconsolataNerdFontMono-Regular.ttf";
+
     TTF_Font *fps_font = TTF_OpenFont(font_file, 32);
     if (!fps_font) {
         fprintf(stderr, "ERROR: Could not open font file: %s %s\n", font_file,
@@ -213,17 +215,27 @@ bool init_state(GameState *gs) {
         delete_state(gs);
         return false;
     }
-    SDL_Color fps_textColour = {50, 50, 50, 255};
+    SDL_Color fps_textColour = {255, 50, 50, 255};
     SDL_Rect fps_textRect = {SCREEN_WIDTH - 200, 0, 200, 32};
 
-    gs->texts = realloc(gs->texts, sizeof(Text) * (gs->text_count + 1));
-    Text *newText = &gs->texts[gs->text_count];
+    gs->texts = realloc(gs->texts, sizeof(Text) * (2));
+    Text *newText = &gs->texts[0];
     newText->type = FPS_Text;
     newText->font = fps_font;
     newText->colour = fps_textColour;
     newText->position = fps_textRect;
     gs->text_count++;
-    gs->texts[0].content = malloc(sizeof(char) * 15);
+    gs->texts[0].content = malloc(sizeof(char) * 10);
+
+    SDL_Color hp_textColour = {255, 255, 255, 255};
+    SDL_Rect hp_textRect = {0, SCREEN_HEIGHT - 20, 200, 32};
+    newText = &gs->texts[1];
+    newText->type = HP_Text;
+    newText->font = fps_font;
+    newText->colour = hp_textColour;
+    newText->position = hp_textRect;
+    gs->text_count++;
+    gs->texts[1].content = malloc(sizeof(char) * 10);
 
     get_player_random_init(gs->sharedState->player);
 
@@ -231,24 +243,40 @@ bool init_state(GameState *gs) {
     return true;
 }
 
-int main() {
+int main(int argc, char **argv) {
     assert(sizeof(MAP) == MAP_WIDTH * MAP_HEIGHT + 1);
 
-    Player player = {
-        .id = get_uuid(),
-        .pos = {0, 0},  // in world coordinates
-        .theta = 0,     // 0 mean facing along y
-        .eye_z = SCREEN_HEIGHT / 10.0f,
-        .hfov = DEG2RAD(90.0f),
-        .vfov = 0.5f,
-        .velocity = {.x = 0, .y = 0, .z = 0},
-        .rotate_speed = PLAYER_SNAP_ROTATION,
-        .speed = PLAYER_SPEED,
-        .vert_speed = PLAYER_VERT_SPEED,
-        .is_jumping = false,
-        .colour = pack_colour(255, 0, 0, 255),
+    char *prog_name = shift(&argc, &argv);
+
+    char *server_name = "127.0.0.1";
+    if (argc > 0) {
+        server_name = shift(&argc, &argv);
+    }
+    int port = 8000;
+    if (argc > 0) {
+        port = atoi(shift(&argc, &argv));
+    }
+
+    NetState netState = {
+        .port = port,
+        .status = DISCONNECTED,
     };
+    strncpy(netState.server_name, server_name, SERVER_NAME_LEN_MAX);
+
+    Player player = {.pos = {0, 0},  // in world coordinates
+                     .theta = 0,     // 0 mean facing along y
+                     .eye_z = SCREEN_HEIGHT / 10.0f,
+                     .hfov = DEG2RAD(90.0f),
+                     .vfov = 0.5f,
+                     .velocity = {.x = 0, .y = 0, .z = 0},
+                     .rotate_speed = PLAYER_SNAP_ROTATION,
+                     .speed = PLAYER_SPEED,
+                     .vert_speed = PLAYER_VERT_SPEED,
+                     .is_jumping = false,
+                     .colour = pack_colour(255, 0, 0, 255),
+                     .hp = 100};
     player.velocity.y = player.speed;
+    snprintf(player.id, sizeof(player.id), "%s", get_uuid());
 
     RenderState *rs = (RenderState *)malloc(sizeof(RenderState));
     if (rs == NULL) {
@@ -268,12 +296,11 @@ int main() {
         exit(1);
     }
     ss->player = &player;
-    ss->entities = (Entity **)malloc(sizeof(Entity **));
     ss->entity_count = 0;
-    ss->status = DISCONNECTED;
-    ss->game_load_state = INITIAL;
+    ss->entities = (Entity **)malloc(ss->entity_count * sizeof(Entity **));
 
-    GameState gs = {.renderState = rs,
+    GameState gs = {.netState = &netState,
+                    .renderState = rs,
                     .sharedState = ss,
                     .game_load_state = INITIAL,
                     .texts = NULL,
@@ -284,10 +311,9 @@ int main() {
     printf("New Player ID: %s\n", gs.sharedState->player->id);
 
     pthread_t net_thread;
-    if (pthread_create(&net_thread, NULL, network_thread,
-                       (void *)gs.sharedState) < 0) {
+    if (pthread_create(&net_thread, NULL, network_thread, (void *)&gs) < 0) {
         fprintf(stderr, "ERROR: Could not create net_thread\n");
-        exit(1);  // TODO: Switch to offline mode?
+        exit(1);
     }
 
     start_time = SDL_GetTicks64();
@@ -302,6 +328,9 @@ int main() {
 
     while (!(gs.game_load_state == QUIT)) {
         float delta_time = (SDL_GetTicks64() - start_time);
+        if (delta_time != 0 && 1000 / delta_time > max1) {
+            max1 = 1000 / delta_time;
+        }
 
 #ifdef FPS_CAP
         if (FRAME_DELTA > delta_time) {
@@ -320,39 +349,34 @@ int main() {
             }
         }
 
-        sprintf(gs.texts[0].content, "FPS: %.0f", 1000 / delta_time);
-        if (delta_time != 0 && 1000 / delta_time > max1) {
-            max1 = 1000 / delta_time;
-        }
-
-        delta_time = delta_time / 75.0f;
         const Uint8 *keystate = SDL_GetKeyboardState(NULL);
 
         pthread_mutex_lock(&gs.sharedState->lock);
         const Vector2 old_pos = gs.sharedState->player->pos;
         if (keystate[SDL_SCANCODE_W]) {
-            move_player(gs.sharedState->player, delta_time, 1);  // Move forward
+            move_player(gs.sharedState->player, delta_time / 75.0f,
+                        1);  // Move forward
         }
 
         if (keystate[SDL_SCANCODE_S]) {
-            move_player(gs.sharedState->player, delta_time,
+            move_player(gs.sharedState->player, delta_time / 75.0f,
                         -1);  // Move backward
         }
 
         if (keystate[SDL_SCANCODE_A]) {
-            rotate_player(gs.sharedState->player, delta_time,
+            rotate_player(gs.sharedState->player, delta_time / 75.0f,
                           1);  // Rotate left
         }
 
         if (keystate[SDL_SCANCODE_D]) {
-            rotate_player(gs.sharedState->player, delta_time,
+            rotate_player(gs.sharedState->player, delta_time / 75.0f,
                           -1);  // Rotate right
         }
 
         if (keystate[SDL_SCANCODE_SPACE]) {
-            jump_player(gs.sharedState->player, delta_time);
+            jump_player(gs.sharedState->player, delta_time / 75.0f);
         }
-        player_gravity(gs.sharedState->player, delta_time);
+        player_gravity(gs.sharedState->player, delta_time / 75.0f);
         handle_wall_collision(gs.sharedState, old_pos);
         pthread_mutex_unlock(&gs.sharedState->lock);
 
@@ -371,6 +395,11 @@ int main() {
                        NULL);
         for (size_t i = 0; i < gs.text_count; i++) {
             Text *text = &gs.texts[i];
+            if (text->type == FPS_Text) {
+                sprintf(text->content, "FPS: %.1f", 1000 / delta_time);
+            } else if (text->type == HP_Text) {
+                sprintf(text->content, "HP: %.1f", gs.sharedState->player->hp);
+            }
             SDL_Surface *textSurface =
                 TTF_RenderText_Solid(text->font, text->content, text->colour);
 
@@ -395,7 +424,7 @@ int main() {
         SDL_RenderPresent(gs.renderState->renderer);
     }
 
-    printf("Max FPS:%f\n", max1);
+    printf("Max FPS: %f\n", max1);
     delete_state(&gs);
 
     return 0;
