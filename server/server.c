@@ -6,49 +6,17 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define UTILS_IMPLEMENTATION
+#include "client_state.h"
 #include "net_stuff.h"
+#include "utilities.h"
+#define UTILS_IMPLEMENTATION
 #include "utils.h"
 
 #define BACKLOG 10
 #define TICK_RATE 30  // Hz
 
-typedef struct Message {
-    char protocol_version[PROTOCOL_LEN + 1];
-    uint8_t packet_type;
-    uint16_t payload_length;
-    char msg[MAX_MESSAGE_SIZE];  // Actually MAX_MESSAGE_SIZE -
-                                 // MSG_HEADER_SIZE];
-} Message;
-
-typedef struct Client {
-    int new_socket_fd;
-    struct sockaddr_in client_address;
-    Message last_message;
-    char *buffer;
-
-    int buffer_offset;  // Current offset in the buffer
-} Client;
-
-typedef struct {
-    struct timespec last_time;
-    float frequency;
-} Timer;
-void call_if_due(Timer *timer, void (*func)(Client *), Client *arg) {
-    struct timespec current_time;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
-    int diff = (current_time.tv_sec - timer->last_time.tv_sec) * 1000000 +
-               (current_time.tv_nsec - timer->last_time.tv_nsec) / 1000 -
-               1000000 / timer->frequency;
-
-    if (diff >= 0) {
-        timer->last_time = current_time;
-        func(arg);
-    } else
-        usleep(-1 * diff);
-}
-
-void handle_client(Client *arg) {
+void handle_client(void *args) {
+    Client *arg = (Client *)args;
     Message *message = &arg->last_message;
     int bytes_received =
         recv(arg->new_socket_fd, arg->buffer + arg->buffer_offset,
